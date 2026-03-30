@@ -1,0 +1,267 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Configuration for the OpenAPI-to-Working-API autonomous build pipeline",
+  "version": "1.0.0",
+  "tdd": {
+    "enforced": true,
+    "redPhaseRequired": true,
+    "greenPhaseRequired": true,
+    "refactorPhaseOptional": true,
+    "coverageThreshold": 80,
+    "integrationTestRequired": true,
+    "contractTestRequired": true,
+    "testExistenceGate": true
+  },
+  "database": {
+    "defaultProvider": "postgresql",
+    "orm": "drizzle",
+    "connectionPoolSize": 10,
+    "connectionPoolMin": 2,
+    "idleTimeoutMs": 30000,
+    "migrationSafety": true,
+    "blockDestructiveMigrations": true,
+    "softDeleteDefault": true,
+    "timestampsDefault": true,
+    "uuidPrimaryKeys": false,
+    "serialPrimaryKeys": true
+  },
+  "auth": {
+    "defaultStrategy": "jwt",
+    "jwtAlgorithm": "HS256",
+    "tokenExpiry": "15m",
+    "refreshTokenExpiry": "7d",
+    "bcryptRounds": 12,
+    "apiKeyLength": 32,
+    "rateLimitPerUser": 100,
+    "sessionStrategy": "stateless",
+    "rbacEnabled": true
+  },
+  "testing": {
+    "framework": "vitest",
+    "httpClient": "supertest",
+    "integrationTimeout": 30000,
+    "unitTimeout": 5000,
+    "contractTestEnabled": true,
+    "loadTestEnabled": true,
+    "loadTestVUs": 50,
+    "loadTestDuration": "30s",
+    "loadTestRampUp": "10s",
+    "loadTestThresholds": {
+      "http_req_duration_p95": 500,
+      "http_req_duration_p99": 1000,
+      "http_req_failed_rate": 0.01
+    },
+    "testDatabase": {
+      "strategy": "transaction-rollback",
+      "alternativeStrategy": "testcontainers",
+      "seedBeforeTests": true
+    }
+  },
+  "qualityGate": {
+    "testsRequired": true,
+    "typescriptRequired": true,
+    "buildRequired": true,
+    "securityAuditRequired": true,
+    "coverageThreshold": 80,
+    "maxFixAttempts": 2,
+    "eslintRequired": true,
+    "noAnyTypes": true
+  },
+  "deployment": {
+    "targets": ["cloudflare-workers", "node-docker"],
+    "defaultTarget": "cloudflare-workers",
+    "cloudflareWorkers": {
+      "compatibilityDate": "2024-12-01",
+      "nodeCompat": true,
+      "hyperdrive": true,
+      "kv": false,
+      "d1": false,
+      "r2": false,
+      "environments": ["staging", "production"]
+    },
+    "nodeDocker": {
+      "nodeVersion": "22-alpine",
+      "port": 3000,
+      "healthCheckPath": "/health",
+      "processManager": "node",
+      "multiStage": true
+    },
+    "cicd": {
+      "provider": "github-actions",
+      "runTests": true,
+      "runTypeCheck": true,
+      "runSecurityAudit": true,
+      "runBuild": true,
+      "autoDeployStaging": true,
+      "autoDeployProduction": false
+    }
+  },
+  "security": {
+    "rateLimiting": {
+      "enabled": true,
+      "requests": 100,
+      "window": "1m",
+      "strategy": "sliding-window"
+    },
+    "cors": {
+      "enabled": true,
+      "origins": ["*"],
+      "methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+      "allowHeaders": ["Content-Type", "Authorization", "X-API-Key"],
+      "maxAge": 86400
+    },
+    "headers": {
+      "hsts": true,
+      "noSniff": true,
+      "xssProtection": true,
+      "frameOptions": "DENY"
+    },
+    "audit": {
+      "level": "moderate",
+      "failOnVulnerability": true,
+      "checkLockfile": true
+    },
+    "inputValidation": {
+      "maxBodySizeKb": 1024,
+      "maxUrlLengthChars": 2048,
+      "sanitizeStrings": true
+    }
+  },
+  "api": {
+    "pagination": {
+      "defaultLimit": 20,
+      "maxLimit": 100,
+      "strategy": "offset",
+      "cursorPaginationAvailable": true
+    },
+    "responseFormat": "json",
+    "envelope": {
+      "dataField": "data",
+      "metaField": "meta",
+      "errorField": "error"
+    },
+    "versioning": {
+      "strategy": "url-prefix",
+      "currentVersion": "v1",
+      "deprecationHeaderEnabled": true
+    },
+    "filtering": {
+      "enabled": true,
+      "operators": ["eq", "neq", "gt", "gte", "lt", "lte", "like", "in"]
+    },
+    "sorting": {
+      "enabled": true,
+      "defaultField": "createdAt",
+      "defaultOrder": "desc",
+      "maxFields": 3
+    },
+    "healthCheck": {
+      "path": "/health",
+      "includeDbStatus": true,
+      "includeVersion": true
+    }
+  },
+  "reporting": {
+    "outputDir": ".claude/build-reports",
+    "buildReportFile": "build-report.md",
+    "testReportFile": "test-report.md",
+    "loadTestReportFile": "load-test-report.md",
+    "securityReportFile": "security-report.md",
+    "includeEndpointInventory": true,
+    "includeSchemaDigram": true
+  },
+  "orchestration": {
+    "enabled": true,
+    "maxConcurrent": 3,
+    "phases": {
+      "schema-intake": {
+        "depends": [],
+        "resources": ["filesystem:build-spec"],
+        "blocking": true,
+        "description": "Parse OpenAPI spec and create build spec"
+      },
+      "database-design": {
+        "depends": ["schema-intake"],
+        "resources": ["filesystem:schema", "filesystem:migrations"],
+        "blocking": true,
+        "description": "Generate Drizzle schemas and initial migration"
+      },
+      "tdd-scaffold": {
+        "depends": ["database-design"],
+        "resources": ["filesystem:tests"],
+        "blocking": true,
+        "description": "Write failing integration tests for all endpoints (RED)"
+      },
+      "route-generation": {
+        "depends": ["tdd-scaffold"],
+        "resources": ["filesystem:src"],
+        "blocking": true,
+        "description": "Generate Hono route handlers that pass tests (GREEN)"
+      },
+      "auth-middleware": {
+        "depends": ["route-generation"],
+        "resources": ["filesystem:middleware"],
+        "blocking": true,
+        "description": "Generate auth, rate limiting, CORS, validation middleware"
+      },
+      "api-testing": {
+        "depends": ["auth-middleware"],
+        "resources": [],
+        "blocking": true,
+        "description": "Run integration, contract, and load tests"
+      },
+      "documentation": {
+        "depends": ["auth-middleware"],
+        "resources": ["filesystem:docs"],
+        "blocking": false,
+        "description": "Generate OpenAPI docs, Postman collection, README"
+      },
+      "quality-gate": {
+        "depends": ["api-testing"],
+        "resources": [],
+        "blocking": true,
+        "description": "Type check, coverage, security audit, build"
+      },
+      "deployment-config": {
+        "depends": ["quality-gate"],
+        "resources": ["filesystem:deploy"],
+        "blocking": false,
+        "description": "Generate Dockerfile, wrangler.toml, CI/CD pipeline"
+      },
+      "report": {
+        "depends": ["quality-gate", "documentation"],
+        "resources": ["filesystem:report"],
+        "blocking": true,
+        "description": "Generate build report with all results"
+      }
+    },
+    "qualityGateSubtasks": {
+      "coverage": {
+        "resources": [],
+        "description": "Run vitest with coverage, check threshold"
+      },
+      "typecheck": {
+        "resources": [],
+        "description": "Run tsc --noEmit"
+      },
+      "build": {
+        "resources": [],
+        "description": "Run pnpm build"
+      },
+      "security-audit": {
+        "resources": [],
+        "description": "Run security-scan.sh"
+      },
+      "eslint": {
+        "resources": [],
+        "description": "Run eslint"
+      }
+    },
+    "reporting": {
+      "showStreamingResults": true,
+      "showBatchSummary": true,
+      "showSpeedupEstimate": true,
+      "includeTimeline": true
+    }
+  }
+}

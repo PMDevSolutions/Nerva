@@ -1,0 +1,74 @@
+# Nerva API - Cloudflare Workers Configuration
+name = "nerva-api"
+main = "src/index.ts"
+compatibility_date = "2025-12-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Development settings
+[dev]
+port = 8787
+local_protocol = "http"
+
+# D1 Database binding
+[[d1_databases]]
+binding = "DB"
+database_name = "nerva-db"
+database_id = "<YOUR_D1_DATABASE_ID>"
+
+# KV Namespace binding (for caching, sessions, etc.)
+[[kv_namespaces]]
+binding = "KV"
+id = "<YOUR_KV_NAMESPACE_ID>"
+
+# Hyperdrive binding for PostgreSQL connection pooling
+[[hyperdrive]]
+binding = "HYPERDRIVE"
+id = "<YOUR_HYPERDRIVE_ID>"
+
+# Environment variables
+[vars]
+ENVIRONMENT = "development"
+LOG_LEVEL = "debug"
+
+# Staging environment
+[env.staging]
+name = "nerva-api-staging"
+[env.staging.vars]
+ENVIRONMENT = "staging"
+LOG_LEVEL = "info"
+
+[[env.staging.d1_databases]]
+binding = "DB"
+database_name = "nerva-db-staging"
+database_id = "<YOUR_STAGING_D1_DATABASE_ID>"
+
+[[env.staging.kv_namespaces]]
+binding = "KV"
+id = "<YOUR_STAGING_KV_NAMESPACE_ID>"
+
+[[env.staging.hyperdrive]]
+binding = "HYPERDRIVE"
+id = "<YOUR_STAGING_HYPERDRIVE_ID>"
+
+# Production environment
+[env.production]
+name = "nerva-api-production"
+routes = [
+  { pattern = "api.example.com", custom_domain = true }
+]
+[env.production.vars]
+ENVIRONMENT = "production"
+LOG_LEVEL = "warn"
+
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "nerva-db-production"
+database_id = "<YOUR_PRODUCTION_D1_DATABASE_ID>"
+
+[[env.production.kv_namespaces]]
+binding = "KV"
+id = "<YOUR_PRODUCTION_KV_NAMESPACE_ID>"
+
+[[env.production.hyperdrive]]
+binding = "HYPERDRIVE"
+id = "<YOUR_PRODUCTION_HYPERDRIVE_ID>"
