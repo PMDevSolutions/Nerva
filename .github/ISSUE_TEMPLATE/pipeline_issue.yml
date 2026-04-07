@@ -1,0 +1,173 @@
+name: Pipeline Issue
+description: Report an issue with the schema-to-API conversion pipelines
+title: "[Pipeline]: "
+labels: ["pipeline", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template to report issues specific to the schema-to-API conversion pipelines.
+
+  - type: dropdown
+    id: pipeline-type
+    attributes:
+      label: Pipeline Type
+      description: Which pipeline are you using?
+      options:
+        - Schema-to-API (/build-from-schema)
+        - Conversational (/build-from-conversation)
+        - Aurelius-to-API (/build-from-aurelius)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: pipeline-phase
+    attributes:
+      label: Pipeline Phase
+      description: At which phase did the issue occur?
+      options:
+        - "Phase 0: Schema Intake (parse OpenAPI spec)"
+        - "Phase 1: Database Design (Drizzle schema generation)"
+        - "Phase 2: TDD Gate (failing integration tests)"
+        - "Phase 3: Route Generation (Hono handlers)"
+        - "Phase 4: Auth & Middleware (JWT, CORS, rate limiting)"
+        - "Phase 5: API Testing (integration + contract + load)"
+        - "Phase 6: Documentation (OpenAPI docs, Postman)"
+        - "Phase 7: Quality Gate (types + coverage + security)"
+        - "Phase 8: Deployment Config (Docker, Wrangler, CI/CD)"
+        - "Phase 9: Report (build report)"
+        - "Unknown / Multiple Phases"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: deployment-target
+    attributes:
+      label: Deployment Target
+      description: What deployment target are you using?
+      options:
+        - Cloudflare Workers
+        - Node.js (Docker)
+        - Both
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Issue Description
+      description: A clear and concise description of the issue.
+      placeholder: Describe what went wrong during the pipeline execution...
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps-to-reproduce
+    attributes:
+      label: Steps to Reproduce
+      description: Steps to reproduce the issue.
+      value: |
+        1. Run command: `/build-from-schema <spec>`
+        2.
+        3.
+        4.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: Expected Behavior
+      description: What you expected the pipeline to do.
+      placeholder: I expected the pipeline to...
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual-behavior
+    attributes:
+      label: Actual Behavior
+      description: What actually happened.
+      placeholder: Instead, the pipeline...
+    validations:
+      required: true
+
+  - type: textarea
+    id: build-spec
+    attributes:
+      label: build-spec.json (if available)
+      description: Paste the contents of your build-spec.json file if it was generated.
+      render: json
+      placeholder: |
+        {
+          "endpoints": [...],
+          "schemas": [...],
+          ...
+        }
+    validations:
+      required: false
+
+  - type: textarea
+    id: error-logs
+    attributes:
+      label: Error Logs / Pipeline Output
+      description: Paste relevant error messages or pipeline output.
+      render: shell
+    validations:
+      required: false
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating System
+      description: e.g., Windows 11, macOS 14.3, Ubuntu 22.04
+      placeholder: Windows 11
+    validations:
+      required: true
+
+  - type: input
+    id: node-version
+    attributes:
+      label: Node.js Version
+      description: Output of `node --version`
+      placeholder: v20.11.0
+    validations:
+      required: true
+
+  - type: input
+    id: claude-code-version
+    attributes:
+      label: Claude Code Version
+      description: Output of `claude --version`
+      placeholder: claude-code v1.0.0
+    validations:
+      required: true
+
+  - type: textarea
+    id: openapi-spec
+    attributes:
+      label: OpenAPI Spec Snippet
+      description: If relevant, paste the portion of your OpenAPI spec related to the issue.
+      render: yaml
+    validations:
+      required: false
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots / Evidence
+      description: Attach screenshots of pipeline output, error messages, etc.
+      placeholder: Drag and drop images here...
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Pre-submission Checklist
+      description: Please confirm the following before submitting.
+      options:
+        - label: I have searched existing issues to ensure this hasn't been reported already.
+          required: true
+        - label: I have included the relevant build-spec.json or error output.
+          required: false

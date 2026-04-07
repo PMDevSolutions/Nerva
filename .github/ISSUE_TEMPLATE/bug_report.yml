@@ -1,0 +1,165 @@
+name: Bug Report
+description: Report a bug or unexpected behavior
+title: "[Bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug! Please fill out the form below with as much detail as possible.
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      description: How severe is the impact of this bug?
+      options:
+        - Critical (System crash, data loss, security issue)
+        - High (Major feature broken, no workaround)
+        - Medium (Feature partially broken, workaround exists)
+        - Low (Minor issue, cosmetic, edge case)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Affected Component
+      description: Which part of the framework is affected?
+      options:
+        - Agents (Custom Claude Code agents)
+        - Skills (Slash command skills)
+        - Scripts (Development automation scripts)
+        - Pipeline - Schema-to-API (/build-from-schema)
+        - Pipeline - Conversational (/build-from-conversation)
+        - Pipeline - Aurelius (/build-from-aurelius)
+        - Templates (Starter configs)
+        - Database (Drizzle ORM, migrations)
+        - Authentication & Security
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: A clear and concise description of the bug.
+      placeholder: Describe what went wrong...
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps-to-reproduce
+    attributes:
+      label: Steps to Reproduce
+      description: Detailed steps to reproduce the behavior.
+      value: |
+        1.
+        2.
+        3.
+        4.
+      placeholder: |
+        1. Run command '...'
+        2. Open file '...'
+        3. Execute '...'
+        4. Observe error...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: Expected Behavior
+      description: What you expected to happen.
+      placeholder: I expected...
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual-behavior
+    attributes:
+      label: Actual Behavior
+      description: What actually happened instead.
+      placeholder: Instead, what happened was...
+    validations:
+      required: true
+
+  - type: textarea
+    id: error-logs
+    attributes:
+      label: Error Logs / Stack Trace
+      description: Paste any relevant error messages, logs, or stack traces.
+      render: shell
+      placeholder: |
+        Paste error output here...
+    validations:
+      required: false
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating System
+      description: e.g., Windows 11, macOS 14.3, Ubuntu 22.04
+      placeholder: Windows 11
+    validations:
+      required: true
+
+  - type: input
+    id: node-version
+    attributes:
+      label: Node.js Version
+      description: Output of `node --version`
+      placeholder: v20.11.0
+    validations:
+      required: true
+
+  - type: input
+    id: pnpm-version
+    attributes:
+      label: pnpm Version
+      description: Output of `pnpm --version`
+      placeholder: 9.0.0
+    validations:
+      required: true
+
+  - type: input
+    id: claude-code-version
+    attributes:
+      label: Claude Code Version (if applicable)
+      description: Output of `claude --version`
+      placeholder: claude-code v1.0.0
+    validations:
+      required: false
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots / Recordings
+      description: If applicable, add screenshots or screen recordings to help explain the problem.
+      placeholder: Drag and drop images or videos here...
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional Context
+      description: Any other context, configuration files, or related information.
+      placeholder: Additional details...
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Pre-submission Checklist
+      description: Please confirm the following before submitting.
+      options:
+        - label: I have searched existing issues to ensure this bug hasn't been reported already.
+          required: true
+        - label: I have provided all the requested information above.
+          required: true
+        - label: I am using the latest version of the framework.
+          required: false
