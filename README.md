@@ -2,6 +2,14 @@
 
 A Claude Code-integrated API & backend development framework with TypeScript, Hono, Drizzle ORM, and automated schema-to-API pipelines.
 
+> Named after Marcus Cocceius Nerva — the Roman Emperor known for pragmatic governance and building stable foundations — this framework brings those same qualities to API development.
+
+[![CI](https://github.com/PMDevSolutions/Nerva/actions/workflows/ci.yml/badge.svg)](https://github.com/PMDevSolutions/Nerva/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Patreon](https://img.shields.io/badge/Patreon-Support-orange?logo=patreon)](https://www.patreon.com/PaulMakesThings)
+
+---
+
 ## What This Framework Provides
 
 - **24 Custom Agents** — Specialized AI agents for backend architecture, database design, testing, security, deployment, and more
@@ -12,30 +20,37 @@ A Claude Code-integrated API & backend development framework with TypeScript, Ho
 - **Testing Stack** — Vitest, supertest, contract tests against OpenAPI, k6 load tests
 - **Schema-First Design** — Database schemas, types, and validators all derived from your API spec
 
+## Prerequisites
+
+- **Node.js** 20 or later
+- **pnpm** 9 or later (`corepack enable && corepack prepare pnpm@latest --activate`)
+- **Claude Code** ([claude.ai/code](https://claude.ai/code)) — agents and skills require Claude Code
+- **PostgreSQL** 15+ (or Docker for local development)
+
 ## Quick Start
 
 ```bash
 # Clone the repository
-git clone <repository-url>
-cd nerva
+git clone https://github.com/PMDevSolutions/Nerva.git
+cd Nerva
+pnpm install
 
 # Initialize a new API project
 ./scripts/setup-project.sh my-api --cloudflare   # or --node
 
-# Install dependencies
-cd api && pnpm install
-
 # Start development
-pnpm dev
+cd api && pnpm dev
 ```
 
-### Build from OpenAPI Spec (Autonomous Pipeline)
+## Pipelines
+
+### Schema-to-API (Autonomous)
 
 ```
 /build-from-schema openapi-spec.yaml
 ```
 
-This runs a 10-phase autonomous pipeline:
+Runs a 10-phase autonomous pipeline:
 
 ```
 [0] Schema Intake   → Parse OpenAPI spec → build-spec.json
@@ -50,7 +65,7 @@ This runs a 10-phase autonomous pipeline:
 [9] Report           → Build report with endpoint inventory + test results
 ```
 
-### Build from Conversation
+### From Conversation
 
 ```
 /build-from-conversation
@@ -58,13 +73,13 @@ This runs a 10-phase autonomous pipeline:
 
 Structured interview (7-10 questions) that generates an OpenAPI spec, then feeds into the pipeline above.
 
-### Build from Aurelius
+### From Aurelius (Full-Stack Workflow)
 
 ```
 /build-from-aurelius path/to/build-spec.json
 ```
 
-Takes an Aurelius frontend build-spec.json and generates the matching backend API.
+Takes an [Aurelius](https://github.com/PMDevSolutions/Aurelius) frontend `build-spec.json` and generates the matching backend API. This enables a full-stack workflow: design in Figma, build frontend with Aurelius, generate backend with Nerva, share a typed API client.
 
 ## Directory Structure
 
@@ -110,7 +125,7 @@ project-root/
 | Content & Docs | 2 | content-creator, brand-guardian |
 | Meta | 2 | joker, studio-coach |
 
-Full catalog: `.claude/CUSTOM-AGENTS-GUIDE.md`
+Full catalog: [`.claude/CUSTOM-AGENTS-GUIDE.md`](.claude/CUSTOM-AGENTS-GUIDE.md)
 
 ## 12 Development Skills
 
@@ -159,27 +174,47 @@ Full catalog: `.claude/CUSTOM-AGENTS-GUIDE.md`
 | `templates/node-server/` | Dockerfile + docker-compose with PostgreSQL |
 | `templates/docker/` | Extended Docker with Redis + pgAdmin |
 
-## Claude Code Plugins
+## Part of the PMDS Framework Series
 
-```
-episodic-memory    # Persistent memory across sessions
-commit-commands    # Git workflow automation (/commit, /commit-push-pr)
-superpowers        # Advanced development workflows (TDD, planning, debugging)
-ai-taskmaster      # Task management (local)
-```
+Nerva is the backend counterpart in a family of Claude Code-integrated development frameworks:
 
-GitHub integration via `gh` CLI.
+| Project | Purpose | Repository |
+|---------|---------|------------|
+| **Aurelius** | Frontend development (React, Vue, Svelte) | [PMDevSolutions/Aurelius](https://github.com/PMDevSolutions/Aurelius) |
+| **Nerva** | Backend/API development (Hono, Drizzle, PostgreSQL) | This repository |
+| **Claudius** | Embeddable AI chat widget | [PMDevSolutions/Claudius](https://github.com/PMDevSolutions/Claudius) |
+| **Flavian** | WordPress development template | [PMDevSolutions/Flavian](https://github.com/PMDevSolutions/Flavian) |
 
-## Documentation Index
+**Full-stack workflow:** Design in Figma &rarr; Build frontend with Aurelius &rarr; Generate backend with Nerva &rarr; Share typed API client
+
+## Documentation
 
 | Document | Location | Description |
 |----------|----------|-------------|
-| Project instructions | `CLAUDE.md` | Full project config for Claude Code |
-| Pipeline guide | `docs/schema-to-api/README.md` | Pipeline overview and troubleshooting |
-| API standards | `docs/api-development/README.md` | TypeScript, Hono, testing conventions |
-| Agent catalog | `.claude/CUSTOM-AGENTS-GUIDE.md` | All 24 agents with use cases |
-| Plugin reference | `.claude/PLUGINS-REFERENCE.md` | Plugin configuration and commands |
+| Quickstart | [`docs/onboarding/quickstart.md`](docs/onboarding/quickstart.md) | Get your first API running |
+| Architecture | [`docs/onboarding/architecture.md`](docs/onboarding/architecture.md) | System architecture overview |
+| Troubleshooting | [`docs/onboarding/troubleshooting.md`](docs/onboarding/troubleshooting.md) | Common issues and solutions |
+| Pipeline guide | [`docs/schema-to-api/README.md`](docs/schema-to-api/README.md) | 10-phase pipeline deep dive |
+| API standards | [`docs/api-development/README.md`](docs/api-development/README.md) | TypeScript, Hono, testing conventions |
+| Agent catalog | [`.claude/CUSTOM-AGENTS-GUIDE.md`](.claude/CUSTOM-AGENTS-GUIDE.md) | All 24 agents with use cases |
+| Plugin reference | [`.claude/PLUGINS-REFERENCE.md`](.claude/PLUGINS-REFERENCE.md) | Plugin configuration and commands |
+
+## Contributing
+
+Contributions are welcome! Please read the [Contributing Guide](CONTRIBUTING.md) before submitting a pull request.
+
+This project follows the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.md).
+
+## Support the Project
+
+Nerva is free and open source. If you find it useful, consider supporting development on [Patreon](https://www.patreon.com/PaulMakesThings). Supporters get voting power on the development roadmap.
+
+See the [Patreon voting process](docs/community/patreon-voting.md) for details.
+
+## Security
+
+To report a vulnerability, please see our [Security Policy](SECURITY.md).
 
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE) for details.
