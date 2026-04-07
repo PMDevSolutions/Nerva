@@ -4,6 +4,8 @@ All notable changes to the Nerva framework will be documented in this file.
 
 This changelog is automatically generated from [Conventional Commits](https://www.conventionalcommits.org/).
 
+## 0.5.0 (2026-04-07)
+
 ## [0.5.0] - 2026-04-07
 
 ### Features
