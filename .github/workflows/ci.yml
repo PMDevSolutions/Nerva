@@ -1,0 +1,173 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate Structure
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check shell script syntax
+        run: |
+          errors=0
+          for f in scripts/*.sh; do
+            if [ -f "$f" ]; then
+              bash -n "$f" || { echo "FAIL: $f"; errors=$((errors + 1)); }
+            fi
+          done
+          echo "Checked $(ls scripts/*.sh 2>/dev/null | wc -l) scripts, $errors failed"
+          exit $errors
+
+      - name: Validate JSON configs
+        run: |
+          errors=0
+          for f in .claude/pipeline.config.json package.json; do
+            if [ -f "$f" ]; then
+              python3 -m json.tool "$f" > /dev/null || { echo "FAIL: $f"; errors=$((errors + 1)); }
+            fi
+          done
+          for f in templates/**/*.json; do
+            if [ -f "$f" ]; then
+              python3 -m json.tool "$f" > /dev/null || { echo "FAIL: $f"; errors=$((errors + 1)); }
+            fi
+          done
+          echo "$errors JSON validation failures"
+          exit $errors
+
+      - name: Validate pipeline.config.json structure
+        run: |
+          required_keys='["tdd","database","auth","testing","qualityGate","deployment","security","api"]'
+          python3 -c "
+          import json, sys
+          with open('.claude/pipeline.config.json') as f:
+              config = json.load(f)
+          required = json.loads('$required_keys')
+          missing = [k for k in required if k not in config]
+          if missing:
+              print(f'Missing required keys: {missing}')
+              sys.exit(1)
+          print(f'All {len(required)} required keys present')
+          "
+
+      - name: Check required files exist
+        run: |
+          exit_code=0
+          required_files=(
+            "CLAUDE.md"
+            "package.json"
+            "CONTRIBUTING.md"
+            "CODE_OF_CONDUCT.md"
+            "SECURITY.md"
+            "LICENSE"
+            ".claude/pipeline.config.json"
+            "scripts/setup-project.sh"
+            "scripts/run-tests.sh"
+            "scripts/check-types.sh"
+            "scripts/security-scan.sh"
+            "scripts/generate-migration.sh"
+          )
+          for f in "${required_files[@]}"; do
+            if [ -f "$f" ]; then
+              echo "  $f: OK"
+            else
+              echo "  $f: MISSING"
+              exit_code=1
+            fi
+          done
+          exit $exit_code
+
+      - name: Validate agent frontmatter
+        run: |
+          errors=0
+          count=0
+          for f in .claude/agents/*.md; do
+            [ -f "$f" ] || continue
+            count=$((count + 1))
+
+            frontmatter=$(sed -n '/^---$/,/^---$/p' "$f" | sed '1d;$d')
+
+            if [ -z "$frontmatter" ]; then
+              echo "FAIL: $f — no YAML frontmatter found"
+              errors=$((errors + 1))
+              continue
+            fi
+
+            for field in name description; do
+              if ! echo "$frontmatter" | grep -qE "^${field}:"; then
+                echo "FAIL: $f — missing required field: $field"
+                errors=$((errors + 1))
+              fi
+            done
+          done
+          echo "Checked $count agents, $errors failures"
+          exit $errors
+
+      - name: Validate skill structure
+        run: |
+          errors=0
+          count=0
+          for dir in .claude/skills/*/; do
+            [ -d "$dir" ] || continue
+            count=$((count + 1))
+
+            skill_file="${dir}SKILL.md"
+
+            if [ ! -f "$skill_file" ]; then
+              echo "FAIL: $dir — missing SKILL.md"
+              errors=$((errors + 1))
+              continue
+            fi
+
+            frontmatter=$(sed -n '/^---$/,/^---$/p' "$skill_file" | sed '1d;$d')
+
+            if [ -z "$frontmatter" ]; then
+              echo "FAIL: $skill_file — no frontmatter found"
+              errors=$((errors + 1))
+              continue
+            fi
+
+            for field in name description; do
+              if ! echo "$frontmatter" | grep -qE "^${field}:"; then
+                echo "FAIL: $skill_file — missing required field: $field"
+                errors=$((errors + 1))
+              fi
+            done
+          done
+          echo "Checked $count skills, $errors failures"
+          exit $errors
+
+      - name: Validate templates
+        run: |
+          errors=0
+
+          for f in templates/**/*.json; do
+            if [ -f "$f" ]; then
+              python3 -m json.tool "$f" > /dev/null 2>&1 || {
+                echo "FAIL: $f — invalid JSON"
+                errors=$((errors + 1))
+              }
+            fi
+          done
+
+          for dir in templates/shared templates/cloudflare-workers templates/node-server templates/docker; do
+            if [ -d "$dir" ]; then
+              echo "  $dir: OK"
+            else
+              echo "  $dir: MISSING"
+              errors=$((errors + 1))
+            fi
+          done
+
+          echo "$errors template validation failures"
+          exit $errors
