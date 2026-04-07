@@ -1,0 +1,41 @@
+{
+  "name": "nerva",
+  "version": "0.5.0",
+  "description": "Claude Code-integrated API & backend development framework with TypeScript, Hono, Drizzle ORM, and automated schema-to-API pipelines",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "release": "commit-and-tag-version",
+    "release:minor": "commit-and-tag-version --release-as minor",
+    "release:major": "commit-and-tag-version --release-as major",
+    "release:patch": "commit-and-tag-version --release-as patch",
+    "release:dry": "commit-and-tag-version --dry-run",
+    "release:first": "commit-and-tag-version --first-release",
+    "setup": "bash scripts/setup-project.sh",
+    "prepare": "husky"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/PMDevSolutions/Nerva.git"
+  },
+  "keywords": [
+    "claude-code",
+    "api",
+    "backend",
+    "hono",
+    "drizzle-orm",
+    "typescript",
+    "openapi",
+    "schema-first",
+    "tdd",
+    "cloudflare-workers"
+  ],
+  "author": "PAMulligan",
+  "license": "MIT",
+  "devDependencies": {
+    "@commitlint/cli": "^20.5.0",
+    "@commitlint/config-conventional": "^20.5.0",
+    "commit-and-tag-version": "^12.7.1",
+    "husky": "^9.1.7"
+  }
+}

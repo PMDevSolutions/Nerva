@@ -1,0 +1,13 @@
+# Validate shell script syntax
+for f in scripts/*.sh; do
+  if [ -f "$f" ]; then
+    bash -n "$f" || exit 1
+  fi
+done
+
+# Validate JSON configs
+for f in .claude/pipeline.config.json package.json; do
+  if [ -f "$f" ]; then
+    node -e "JSON.parse(require('fs').readFileSync('$f','utf8'))" || exit 1
+  fi
+done
