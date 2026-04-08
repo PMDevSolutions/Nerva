@@ -21,7 +21,6 @@ step()    { echo -e "${CYAN}[STEP]${NC} $*"; }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-API_DIR="$PROJECT_ROOT/api"
 TEMPLATES_DIR="$PROJECT_ROOT/templates"
 
 if [[ $# -lt 1 ]]; then

@@ -29,6 +29,12 @@ jobs:
           echo "Checked $(ls scripts/*.sh 2>/dev/null | wc -l) scripts, $errors failed"
           exit $errors
 
+      - name: Run ShellCheck
+        uses: ludeeus/action-shellcheck@master
+        with:
+          scandir: './scripts'
+          severity: warning
+
       - name: Validate JSON configs
         run: |
           errors=0
