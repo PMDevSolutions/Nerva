@@ -74,10 +74,16 @@ fi
 ENV_FILE=".env.${TARGET_ENV}"
 if [[ -f "$ENV_FILE" ]]; then
   info "Loading environment from: $ENV_FILE"
-  set -a; source "$ENV_FILE"; set +a
+  set -a
+  # shellcheck disable=SC1090 # Dynamic env file path determined at runtime
+  source "$ENV_FILE"
+  set +a
 elif [[ -f ".env" ]]; then
   info "Loading environment from: .env"
-  set -a; source ".env"; set +a
+  set -a
+  # shellcheck disable=SC1090 # Dynamic env file path determined at runtime
+  source ".env"
+  set +a
 else
   warn "No .env file found. Ensure DATABASE_URL is set."
 fi

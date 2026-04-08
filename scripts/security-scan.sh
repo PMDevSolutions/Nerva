@@ -132,17 +132,17 @@ run_pattern_scan() {
   # Rate limiting
   info "Checking for rate limiting..."
   HAS_RATE_LIMIT=false
-  for file in $(find "$SRC_DIR" -name "index.ts" -o -name "app.ts" 2>/dev/null); do
+  while IFS= read -r file; do
     grep -qE "(rateLimiter|rateLimit|rate-limit|throttle)" "$file" 2>/dev/null && HAS_RATE_LIMIT=true
-  done
+  done < <(find "$SRC_DIR" -name "index.ts" -o -name "app.ts" 2>/dev/null)
   [[ "$HAS_RATE_LIMIT" == false ]] && add_issue "medium" "rate-limiting" "No rate limiting middleware detected"
 
   # CORS
   info "Checking for CORS configuration..."
   HAS_CORS=false
-  for file in $(find "$SRC_DIR" -name "index.ts" -o -name "app.ts" 2>/dev/null); do
+  while IFS= read -r file; do
     grep -qE "(cors|CORS)" "$file" 2>/dev/null && HAS_CORS=true
-  done
+  done < <(find "$SRC_DIR" -name "index.ts" -o -name "app.ts" 2>/dev/null)
   [[ "$HAS_CORS" == false ]] && add_issue "medium" "cors" "No CORS middleware detected"
 
   # Console.log
