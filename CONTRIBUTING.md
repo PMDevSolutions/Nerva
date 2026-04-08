@@ -6,6 +6,20 @@ Whether you are fixing a bug, adding a feature, improving documentation, or sugg
 
 ---
 
+## Quick Start with GitHub Codespaces
+
+The fastest way to start contributing — no local setup required:
+
+1. Navigate to the [Nerva repository](https://github.com/PMDevSolutions/Nerva).
+2. Click the green **Code** button, then select the **Codespaces** tab.
+3. Click **Create codespace on main** (or on your feature branch).
+4. Wait for the environment to build. Dependencies install automatically via `pnpm install`.
+5. Start coding. The dev server ports (3000, 8787) are forwarded automatically.
+
+> **Tip:** If you prefer VS Code locally with a Dev Container, install the [Dev Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers), then choose **Reopen in Container** from the command palette.
+
+---
+
 ## Getting Started
 
 1. **Fork and clone the repository:**
