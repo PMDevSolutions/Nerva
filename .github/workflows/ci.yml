@@ -177,3 +177,20 @@ jobs:
 
           echo "$errors template validation failures"
           exit $errors
+
+  check-links:
+    name: Check Markdown Links
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check markdown links
+        uses: lycheeverse/lychee-action@v2
+        with:
+          args: >-
+            --verbose
+            --no-progress
+            '*.md'
+            'docs/**/*.md'
+          fail: true
