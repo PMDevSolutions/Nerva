@@ -1,0 +1,40 @@
+# Lychee link checker configuration
+# https://lychee.cli.rs/usage/config/
+
+# Directories and files to exclude from checking
+exclude_path = [
+  "node_modules",
+  ".git",
+  "pnpm-lock.yaml",
+  ".claude"
+]
+
+# Max number of retries per request (handles transient failures)
+max_retries = 3
+
+# Timeout per request in seconds
+timeout = 30
+
+# Max concurrent requests (avoid rate limiting)
+max_concurrency = 5
+
+# Accept 200..=299 status codes
+accept = [200, 201, 202, 203, 204, 206, 429]
+
+# Exclude URLs that are known to block automated checks or are placeholders
+exclude = [
+  # Patreon blocks automated requests
+  "https://www.patreon.com/.*",
+  # Shield badge images (always valid if the URL format is correct)
+  "https://img.shields.io/.*",
+  # Contributor Covenant version-specific URLs may redirect
+  "https://www.contributor-covenant.org/version/.*",
+  # Example/placeholder URLs
+  "https://example.com.*"
+]
+
+# Don't fail on URLs behind authentication or known to be flaky
+exclude_all_private = true
+
+# Skip checking mail addresses
+include_mail = false
