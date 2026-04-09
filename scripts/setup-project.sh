@@ -319,6 +319,18 @@ if [[ "$PLATFORM" == "cloudflare" ]]; then
   step "Setting up Cloudflare Workers..."
   run_cmd pnpm add -D wrangler
   copy_file "$TEMPLATES_DIR/cloudflare-workers/wrangler.toml" "$API_DIR/wrangler.toml"
+
+  write_file "$API_DIR/.dev.vars.example" << 'DVEOF'
+# .dev.vars — Cloudflare Workers local environment variables
+# This is the Workers equivalent of .env for local development.
+# Copy this file to .dev.vars and fill in your values:
+#   cp .dev.vars.example .dev.vars
+
+ENVIRONMENT=development
+LOG_LEVEL=debug
+DATABASE_URL=postgresql://nerva:nerva_secret@localhost:5432/nerva_db
+DVEOF
+
   success "Cloudflare Workers configured. Edit wrangler.toml with your resource IDs."
 else
   step "Setting up Node.js / Docker..."
