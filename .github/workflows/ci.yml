@@ -191,6 +191,7 @@ jobs:
           args: >-
             --verbose
             --no-progress
+            --config .lychee.toml
             '*.md'
             'docs/**/*.md'
           fail: true
