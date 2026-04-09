@@ -338,7 +338,7 @@ describe('Health endpoint', () => {
 
   it('should include X-Request-Id response header', async () => {
     const res = await app.request('/health');
-    expect(res.headers.get('X-Request-Id')).toBeDefined();
+    expect(res.headers.get('X-Request-Id')).not.toBeNull();
   });
 });
 HTEOF
