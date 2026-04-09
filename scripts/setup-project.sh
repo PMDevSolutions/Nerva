@@ -3,7 +3,7 @@ set -euo pipefail
 
 # ============================================================================
 # setup-project.sh - Initialize a new Nerva API project
-# Usage: ./scripts/setup-project.sh <project-name> [--cloudflare|--node]
+# Usage: ./scripts/setup-project.sh <project-name> [--cloudflare|--node] [--dry-run]
 # ============================================================================
 
 RED='\033[0;31m'
@@ -18,6 +18,7 @@ success() { echo -e "${GREEN}[OK]${NC} $*"; }
 warn()    { echo -e "${YELLOW}[WARN]${NC} $*"; }
 error()   { echo -e "${RED}[ERROR]${NC} $*" >&2; }
 step()    { echo -e "${CYAN}[STEP]${NC} $*"; }
+dryrun()  { echo -e "${YELLOW}[DRY RUN]${NC} $*"; }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -25,9 +26,10 @@ TEMPLATES_DIR="$PROJECT_ROOT/templates"
 
 if [[ $# -lt 1 ]]; then
   error "Missing project name."
-  echo "Usage: $0 <project-name> [--cloudflare|--node]"
+  echo "Usage: $0 <project-name> [--cloudflare|--node] [--dry-run]"
   echo "  --cloudflare   Set up for Cloudflare Workers deployment"
   echo "  --node         Set up for Node.js / Docker deployment (default)"
+  echo "  --dry-run      Preview what would be created without making changes"
   exit 1
 fi
 
@@ -35,45 +37,99 @@ PROJECT_NAME="$1"
 shift
 
 PLATFORM="node"
+DRY_RUN=false
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --cloudflare) PLATFORM="cloudflare"; shift ;;
     --node)       PLATFORM="node"; shift ;;
+    --dry-run)    DRY_RUN=true; shift ;;
     *)            error "Unknown option: $1"; exit 1 ;;
   esac
 done
 
 TARGET_DIR="$(pwd)/$PROJECT_NAME"
+API_DIR="$TARGET_DIR/api"
 
-if [[ -d "$TARGET_DIR" ]]; then
+# --- Dry-run wrapper functions ---
+
+make_dirs() {
+  if $DRY_RUN; then
+    for dir in "$@"; do dryrun "Would create: $dir"; done
+  else
+    mkdir -p "$@"
+  fi
+}
+
+copy_file() {
+  if $DRY_RUN; then
+    dryrun "Would copy: $1 → $2"
+  else
+    cp "$1" "$2"
+  fi
+}
+
+# Reads heredoc content from stdin; writes it or prints what would be generated.
+write_file() {
+  local dest="$1"
+  if $DRY_RUN; then
+    dryrun "Would generate: $dest"
+    cat > /dev/null
+  else
+    cat > "$dest"
+  fi
+}
+
+run_cmd() {
+  if $DRY_RUN; then
+    dryrun "Would run: $*"
+  else
+    "$@"
+  fi
+}
+
+# --- Pre-flight checks ---
+
+if ! $DRY_RUN && [[ -d "$TARGET_DIR" ]]; then
   error "Directory already exists: $TARGET_DIR"
   exit 1
 fi
 
 if ! command -v pnpm &>/dev/null; then
-  error "pnpm is not installed. Install: corepack enable && corepack prepare pnpm@latest --activate"
-  exit 1
+  if $DRY_RUN; then
+    warn "pnpm is not installed. Install: corepack enable && corepack prepare pnpm@latest --activate"
+  else
+    error "pnpm is not installed. Install: corepack enable && corepack prepare pnpm@latest --activate"
+    exit 1
+  fi
+fi
+
+if $DRY_RUN; then
+  echo ""
+  info "Dry-run preview for project: ${CYAN}$PROJECT_NAME${NC} (platform: $PLATFORM)"
+  echo ""
 fi
 
 info "Creating Nerva project: ${CYAN}$PROJECT_NAME${NC} (platform: $PLATFORM)"
 
 step "Creating directory structure..."
-mkdir -p "$TARGET_DIR/api/src"/{routes,db/migrations,middleware,lib,types}
-mkdir -p "$TARGET_DIR/api/tests"/{unit,integration,load}
-mkdir -p "$TARGET_DIR/docs"
+make_dirs "$TARGET_DIR/api/src"/{routes,db/migrations,middleware,lib,types}
+make_dirs "$TARGET_DIR/api/tests"/{unit,integration,load}
+make_dirs "$TARGET_DIR/docs"
 success "Directory structure created."
 
 step "Copying shared configuration templates..."
-cp "$TEMPLATES_DIR/shared/tsconfig.json"      "$TARGET_DIR/api/tsconfig.json"
-cp "$TEMPLATES_DIR/shared/eslint.config.js"   "$TARGET_DIR/api/eslint.config.js"
-cp "$TEMPLATES_DIR/shared/prettier.config.js" "$TARGET_DIR/api/prettier.config.js"
-cp "$TEMPLATES_DIR/shared/vitest.config.ts"   "$TARGET_DIR/api/vitest.config.ts"
+copy_file "$TEMPLATES_DIR/shared/tsconfig.json"      "$API_DIR/tsconfig.json"
+copy_file "$TEMPLATES_DIR/shared/eslint.config.js"   "$API_DIR/eslint.config.js"
+copy_file "$TEMPLATES_DIR/shared/prettier.config.js" "$API_DIR/prettier.config.js"
+copy_file "$TEMPLATES_DIR/shared/vitest.config.ts"   "$API_DIR/vitest.config.ts"
 success "Shared templates copied."
 
 step "Initializing package.json..."
-cd "$TARGET_DIR/api"
+if ! $DRY_RUN; then
+  cd "$API_DIR"
+fi
 
-cat > package.json << PKGJSON
+write_file "$API_DIR/package.json" << PKGJSON
 {
   "name": "$PROJECT_NAME",
   "version": "0.0.1",
@@ -101,18 +157,18 @@ PKGJSON
 success "package.json created."
 
 step "Installing production dependencies..."
-pnpm add hono drizzle-orm postgres zod @hono/zod-validator
+run_cmd pnpm add hono drizzle-orm postgres zod @hono/zod-validator
 success "Production dependencies installed."
 
 step "Installing dev dependencies..."
-pnpm add -D vitest typescript eslint prettier drizzle-kit @types/node tsx \
+run_cmd pnpm add -D vitest typescript eslint prettier drizzle-kit @types/node tsx \
   @eslint/js typescript-eslint @vitest/coverage-v8
 success "Dev dependencies installed."
 
 step "Creating initial source files..."
 
 if [[ "$PLATFORM" == "cloudflare" ]]; then
-  cat > src/index.ts << 'SRCEOF'
+  write_file "$API_DIR/src/index.ts" << 'SRCEOF'
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
@@ -143,7 +199,7 @@ app.get('/', (c) => {
 export default app;
 SRCEOF
 else
-  cat > src/index.ts << 'SRCEOF'
+  write_file "$API_DIR/src/index.ts" << 'SRCEOF'
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
@@ -169,10 +225,10 @@ console.log(`Server starting on port ${port}`);
 
 serve({ fetch: app.fetch, port });
 SRCEOF
-  pnpm add @hono/node-server
+  run_cmd pnpm add @hono/node-server
 fi
 
-cat > drizzle.config.ts << 'DEOF'
+write_file "$API_DIR/drizzle.config.ts" << 'DEOF'
 import { defineConfig } from 'drizzle-kit';
 
 export default defineConfig({
@@ -187,7 +243,7 @@ export default defineConfig({
 });
 DEOF
 
-cat > src/db/schema.ts << 'SEOF'
+write_file "$API_DIR/src/db/schema.ts" << 'SEOF'
 import { pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 
 export const users = pgTable('users', {
@@ -199,7 +255,7 @@ export const users = pgTable('users', {
 });
 SEOF
 
-cat > src/db/seed.ts << 'SEEDEOF'
+write_file "$API_DIR/src/db/seed.ts" << 'SEEDEOF'
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from './schema.js';
@@ -226,7 +282,7 @@ seed().catch((err) => {
 });
 SEEDEOF
 
-cat > tests/setup.ts << 'TSEOF'
+write_file "$API_DIR/tests/setup.ts" << 'TSEOF'
 import { beforeAll, afterAll } from 'vitest';
 
 beforeAll(() => {
@@ -238,7 +294,7 @@ afterAll(() => {
 });
 TSEOF
 
-cat > tests/unit/health.test.ts << 'HTEOF'
+write_file "$API_DIR/tests/unit/health.test.ts" << 'HTEOF'
 import { describe, it, expect } from 'vitest';
 import { Hono } from 'hono';
 
@@ -261,15 +317,15 @@ success "Initial source files created."
 # ---- Platform-specific setup ----
 if [[ "$PLATFORM" == "cloudflare" ]]; then
   step "Setting up Cloudflare Workers..."
-  pnpm add -D wrangler
-  cp "$TEMPLATES_DIR/cloudflare-workers/wrangler.toml" ./wrangler.toml
+  run_cmd pnpm add -D wrangler
+  copy_file "$TEMPLATES_DIR/cloudflare-workers/wrangler.toml" "$API_DIR/wrangler.toml"
   success "Cloudflare Workers configured. Edit wrangler.toml with your resource IDs."
 else
   step "Setting up Node.js / Docker..."
-  cp "$TEMPLATES_DIR/node-server/Dockerfile" ./Dockerfile
-  cp "$TEMPLATES_DIR/node-server/docker-compose.yml" ./docker-compose.yml
+  copy_file "$TEMPLATES_DIR/node-server/Dockerfile" "$API_DIR/Dockerfile"
+  copy_file "$TEMPLATES_DIR/node-server/docker-compose.yml" "$API_DIR/docker-compose.yml"
 
-  cat > .env.example << 'ENVEOF'
+  write_file "$API_DIR/.env.example" << 'ENVEOF'
 NODE_ENV=development
 PORT=3000
 DATABASE_URL=postgresql://nerva:nerva_secret@localhost:5432/nerva_db
@@ -280,7 +336,7 @@ ENVEOF
 fi
 
 # ---- .gitignore ----
-cat > .gitignore << 'GEOF'
+write_file "$API_DIR/.gitignore" << 'GEOF'
 node_modules/
 dist/
 .env
@@ -296,20 +352,26 @@ GEOF
 # ---- Summary ----
 echo ""
 echo -e "${GREEN}============================================${NC}"
-echo -e "${GREEN} Project created successfully!${NC}"
+if $DRY_RUN; then
+  echo -e "${GREEN} Dry-run complete — no files were created${NC}"
+else
+  echo -e "${GREEN} Project created successfully!${NC}"
+fi
 echo -e "${GREEN}============================================${NC}"
 echo ""
 echo -e "  Name:      ${CYAN}$PROJECT_NAME${NC}"
 echo -e "  Platform:  ${CYAN}$PLATFORM${NC}"
-echo -e "  Location:  ${CYAN}$TARGET_DIR/api${NC}"
+echo -e "  Location:  ${CYAN}$API_DIR${NC}"
 echo ""
-echo "  Next steps:"
-echo "    cd $PROJECT_NAME/api"
-if [[ "$PLATFORM" == "cloudflare" ]]; then
-  echo "    npx wrangler dev          # Start local dev server"
-else
-  echo "    docker compose up -d      # Start PostgreSQL"
-  echo "    pnpm dev                  # Start dev server"
+if ! $DRY_RUN; then
+  echo "  Next steps:"
+  echo "    cd $PROJECT_NAME/api"
+  if [[ "$PLATFORM" == "cloudflare" ]]; then
+    echo "    npx wrangler dev          # Start local dev server"
+  else
+    echo "    docker compose up -d      # Start PostgreSQL"
+    echo "    pnpm dev                  # Start dev server"
+  fi
+  echo "    pnpm test                 # Run tests"
+  echo ""
 fi
-echo "    pnpm test                 # Run tests"
-echo ""
