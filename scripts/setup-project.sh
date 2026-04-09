@@ -172,6 +172,7 @@ if [[ "$PLATFORM" == "cloudflare" ]]; then
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
+import { requestId } from 'hono/request-id';
 import { secureHeaders } from 'hono/secure-headers';
 
 type Bindings = {
@@ -187,9 +188,14 @@ const app = new Hono<{ Bindings: Bindings }>();
 app.use('*', logger());
 app.use('*', cors());
 app.use('*', secureHeaders());
+app.use('*', requestId());
 
 app.get('/health', (c) => {
-  return c.json({ status: 'ok', timestamp: new Date().toISOString() });
+  return c.json({
+    status: 'ok',
+    requestId: c.get('requestId'),
+    timestamp: new Date().toISOString(),
+  });
 });
 
 app.get('/', (c) => {
@@ -203,6 +209,7 @@ else
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
+import { requestId } from 'hono/request-id';
 import { secureHeaders } from 'hono/secure-headers';
 import { serve } from '@hono/node-server';
 
@@ -211,9 +218,14 @@ const app = new Hono();
 app.use('*', logger());
 app.use('*', cors());
 app.use('*', secureHeaders());
+app.use('*', requestId());
 
 app.get('/health', (c) => {
-  return c.json({ status: 'ok', timestamp: new Date().toISOString() });
+  return c.json({
+    status: 'ok',
+    requestId: c.get('requestId'),
+    timestamp: new Date().toISOString(),
+  });
 });
 
 app.get('/', (c) => {
@@ -297,16 +309,36 @@ TSEOF
 write_file "$API_DIR/tests/unit/health.test.ts" << 'HTEOF'
 import { describe, it, expect } from 'vitest';
 import { Hono } from 'hono';
+import { requestId } from 'hono/request-id';
 
 describe('Health endpoint', () => {
   const app = new Hono();
-  app.get('/health', (c) => c.json({ status: 'ok' }));
+  app.use('*', requestId());
+  app.get('/health', (c) =>
+    c.json({
+      status: 'ok',
+      requestId: c.get('requestId'),
+    }),
+  );
 
   it('should return ok status', async () => {
     const res = await app.request('/health');
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.status).toBe('ok');
+  });
+
+  it('should return a requestId', async () => {
+    const res = await app.request('/health');
+    const body = await res.json();
+    expect(body.requestId).toBeDefined();
+    expect(typeof body.requestId).toBe('string');
+    expect(body.requestId.length).toBeGreaterThan(0);
+  });
+
+  it('should include X-Request-Id response header', async () => {
+    const res = await app.request('/health');
+    expect(res.headers.get('X-Request-Id')).not.toBeNull();
   });
 });
 HTEOF
