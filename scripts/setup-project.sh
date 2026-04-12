@@ -174,6 +174,8 @@ import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { requestId } from 'hono/request-id';
 import { secureHeaders } from 'hono/secure-headers';
+// Note: Response compression is handled automatically by Cloudflare's edge network.
+// No compress() middleware is needed for Workers deployments.
 
 type Bindings = {
   DB: D1Database;
@@ -207,6 +209,7 @@ SRCEOF
 else
   write_file "$API_DIR/src/index.ts" << 'SRCEOF'
 import { Hono } from 'hono';
+import { compress } from 'hono/compress';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { requestId } from 'hono/request-id';
@@ -217,6 +220,7 @@ const app = new Hono();
 
 app.use('*', logger());
 app.use('*', cors());
+app.use('*', compress());
 app.use('*', secureHeaders());
 app.use('*', requestId());
 
