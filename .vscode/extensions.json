@@ -1,0 +1,10 @@
+{
+  "recommendations": [
+    "dbaeumer.vscode-eslint",
+    "esbenp.prettier-vscode",
+    "vitest.explorer",
+    "redhat.vscode-yaml",
+    "timonwong.shellcheck",
+    "EditorConfig.EditorConfig"
+  ]
+}
