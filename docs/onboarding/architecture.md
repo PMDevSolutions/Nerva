@@ -129,6 +129,18 @@ Nerva is designed to work with [Aurelius](https://github.com/PMDevSolutions/Aure
 3. Generate backend with Nerva (`/build-from-aurelius`)
 4. Share typed API client (`./scripts/generate-client.sh`)
 
+## Architecture Decision Records
+
+Key architectural decisions are documented as ADRs in [`docs/adr/`](../adr/README.md):
+
+| ADR | Decision |
+|-----|----------|
+| [001](../adr/001-hono-over-express.md) | Hono as HTTP framework over Express |
+| [002](../adr/002-drizzle-over-prisma.md) | Drizzle ORM over Prisma and TypeORM |
+| [003](../adr/003-tdd-mandatory-gate.md) | TDD enforced as a hard pipeline gate |
+
+To understand why a particular technology or approach was chosen, start with the ADRs. To propose a change, create a new ADR using the [template](../adr/000-template.md).
+
 ## Configuration
 
 Pipeline behavior is controlled by `.claude/pipeline.config.json`. Key sections:
