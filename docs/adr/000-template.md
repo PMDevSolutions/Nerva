@@ -2,7 +2,7 @@
 
 ## Status
 
-[Proposed | Accepted | Deprecated | Superseded by [ADR-NNN](NNN-title.md)]
+[Proposed | Accepted | Deprecated | Superseded by ADR-NNN]
 
 ## Date
 
@@ -48,4 +48,4 @@ To propose a new ADR:
 To supersede an ADR:
 
 1. Create a new ADR referencing the old one.
-2. Update the old ADR's status to **Superseded by [ADR-NNN](NNN-title.md)**.
+2. Update the old ADR's status to **Superseded by ADR-NNN** (link to the new ADR).
