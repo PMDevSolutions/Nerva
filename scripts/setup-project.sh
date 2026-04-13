@@ -239,7 +239,35 @@ app.get('/', (c) => {
 const port = Number(process.env.PORT) || 3000;
 console.log(`Server starting on port ${port}`);
 
-serve({ fetch: app.fetch, port });
+const server = serve({ fetch: app.fetch, port });
+
+// --- Graceful shutdown ---
+const SHUTDOWN_TIMEOUT_MS = 10_000;
+let isShuttingDown = false;
+
+const shutdown = (signal: string) => {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+
+  console.log(`\n${signal} received. Shutting down gracefully...`);
+
+  const forceExit = setTimeout(() => {
+    console.error(`Forced shutdown after ${SHUTDOWN_TIMEOUT_MS / 1000}s timeout.`);
+    process.exit(1);
+  }, SHUTDOWN_TIMEOUT_MS);
+  forceExit.unref();
+
+  server.close(() => {
+    console.log('HTTP server closed.');
+    // TODO: Close database connection pool when configured
+    // await pool.end();
+    console.log('Shutdown complete.');
+    process.exit(0);
+  });
+};
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
 SRCEOF
   run_cmd pnpm add @hono/node-server
 fi
