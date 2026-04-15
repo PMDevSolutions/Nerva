@@ -42,6 +42,8 @@ pnpm install
 cd api && pnpm dev
 ```
 
+> **New to Nerva?** See the [Todo API example](examples/todo-api-cloudflare/) for a complete working Cloudflare Workers project with CRUD, D1, Zod validation, and tests.
+
 ## Pipelines
 
 ### Schema-to-API (Autonomous)
