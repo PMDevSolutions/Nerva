@@ -27,8 +27,8 @@ exclude = [
   "https://www.patreon.com/.*",
   # Shield badge images (always valid if the URL format is correct)
   "https://img.shields.io/.*",
-  # Contributor Covenant version-specific URLs may redirect
-  "https://www.contributor-covenant.org/version/.*",
+  # Contributor Covenant — blocks/resets automated requests
+  "https://www.contributor-covenant.org/.*",
   # Example/placeholder URLs
   "https://example.com.*"
 ]
