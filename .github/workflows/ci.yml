@@ -178,6 +178,29 @@ jobs:
           echo "$errors template validation failures"
           exit $errors
 
+  node-compat:
+    name: Node.js ${{ matrix.node-version }} Compatibility
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      matrix:
+        node-version: [20, 22]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - run: corepack enable
+      - run: pnpm install
+
+      - name: Verify installation
+        run: |
+          echo "Node.js version: $(node --version)"
+          echo "pnpm version: $(pnpm --version)"
+          pnpm ls --depth 0
+
   check-links:
     name: Check Markdown Links
     runs-on: ubuntu-latest
