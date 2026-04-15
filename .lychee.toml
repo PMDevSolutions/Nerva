@@ -29,6 +29,8 @@ exclude = [
   "https://img.shields.io/.*",
   # Contributor Covenant — blocks/resets automated requests
   "https://www.contributor-covenant.org/.*",
+  # Claude (Anthropic) — bot-protected, returns 403 to automated checks
+  "https://claude.ai/.*",
   # Example/placeholder URLs
   "https://example.com.*"
 ]

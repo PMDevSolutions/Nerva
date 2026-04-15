@@ -1,0 +1,5 @@
+# .dev.vars — Cloudflare Workers local environment variables
+# Copy this file to .dev.vars and fill in your values:
+#   cp .dev.vars.example .dev.vars
+
+ENVIRONMENT=development
