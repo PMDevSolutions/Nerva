@@ -33,7 +33,7 @@
   "author": "PAMulligan",
   "license": "MIT",
   "devDependencies": {
-    "@commitlint/cli": "^20.5.0",
+    "@commitlint/cli": "^20.5.2",
     "@commitlint/config-conventional": "^20.5.0",
     "commit-and-tag-version": "^12.7.1",
     "husky": "^9.1.7"
