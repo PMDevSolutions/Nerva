@@ -337,6 +337,46 @@ seed().catch((err) => {
 });
 SEEDEOF
 
+if [[ "$PLATFORM" == "cloudflare" ]]; then
+  write_file "$API_DIR/src/db/ping.ts" << 'PEOF'
+import type { Context } from 'hono';
+import postgres from 'postgres';
+
+type Bindings = { HYPERDRIVE: Hyperdrive };
+
+export async function pingDatabase(
+  c: Context<{ Bindings: Bindings }>,
+): Promise<'connected' | 'disconnected'> {
+  if (!c.env.HYPERDRIVE?.connectionString) return 'disconnected';
+  const sql = postgres(c.env.HYPERDRIVE.connectionString, {
+    max: 1,
+    fetch_types: false,
+  });
+  try {
+    await sql`SELECT 1`;
+    return 'connected';
+  } catch {
+    return 'disconnected';
+  } finally {
+    void sql.end({ timeout: 1 }).catch(() => {});
+  }
+}
+PEOF
+else
+  write_file "$API_DIR/src/db/ping.ts" << 'PEOF'
+import { client } from './client.js';
+
+export async function pingDatabase(): Promise<'connected' | 'disconnected'> {
+  try {
+    await client`SELECT 1`;
+    return 'connected';
+  } catch {
+    return 'disconnected';
+  }
+}
+PEOF
+fi
+
 write_file "$API_DIR/tests/setup.ts" << 'TSEOF'
 import { beforeAll, afterAll } from 'vitest';
 
