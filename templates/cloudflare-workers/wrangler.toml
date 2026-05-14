@@ -29,6 +29,8 @@ id = "<YOUR_HYPERDRIVE_ID>"
 [vars]
 ENVIRONMENT = "development"
 LOG_LEVEL = "debug"
+APP_VERSION = "0.0.1"
+HEALTH_DB_TIMEOUT_MS = "2000"
 
 # Staging environment
 [env.staging]
@@ -36,6 +38,8 @@ name = "nerva-api-staging"
 [env.staging.vars]
 ENVIRONMENT = "staging"
 LOG_LEVEL = "info"
+APP_VERSION = "0.0.1"
+HEALTH_DB_TIMEOUT_MS = "2000"
 
 [[env.staging.d1_databases]]
 binding = "DB"
@@ -59,6 +63,8 @@ routes = [
 [env.production.vars]
 ENVIRONMENT = "production"
 LOG_LEVEL = "warn"
+APP_VERSION = "0.0.1"
+HEALTH_DB_TIMEOUT_MS = "2000"
 
 [[env.production.d1_databases]]
 binding = "DB"

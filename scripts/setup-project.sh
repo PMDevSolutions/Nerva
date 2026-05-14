@@ -506,6 +506,8 @@ if [[ "$PLATFORM" == "cloudflare" ]]; then
 ENVIRONMENT=development
 LOG_LEVEL=debug
 DATABASE_URL=postgresql://nerva:nerva_secret@localhost:5432/nerva_db
+APP_VERSION=0.0.1
+HEALTH_DB_TIMEOUT_MS=2000
 DVEOF
 
   success "Cloudflare Workers configured. Edit wrangler.toml with your resource IDs."
@@ -519,6 +521,8 @@ NODE_ENV=development
 PORT=3000
 DATABASE_URL=postgresql://nerva:nerva_secret@localhost:5432/nerva_db
 LOG_LEVEL=debug
+APP_VERSION=0.0.1
+HEALTH_DB_TIMEOUT_MS=2000
 ENVEOF
 
   success "Node.js / Docker configured."
