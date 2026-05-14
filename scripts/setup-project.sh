@@ -331,16 +331,13 @@ SEEDEOF
 
 if [[ "$PLATFORM" == "cloudflare" ]]; then
   write_file "$API_DIR/src/db/ping.ts" << 'PEOF'
-import type { Context } from 'hono';
 import postgres from 'postgres';
 
-type Bindings = { HYPERDRIVE: Hyperdrive };
-
 export async function pingDatabase(
-  c: Context<{ Bindings: Bindings }>,
+  hyperdrive: Hyperdrive | undefined,
 ): Promise<'connected' | 'disconnected'> {
-  if (!c.env.HYPERDRIVE?.connectionString) return 'disconnected';
-  const sql = postgres(c.env.HYPERDRIVE.connectionString, {
+  if (!hyperdrive?.connectionString) return 'disconnected';
+  const sql = postgres(hyperdrive.connectionString, {
     max: 1,
     fetch_types: false,
   });
@@ -375,7 +372,7 @@ export const healthRoutes = new Hono<{ Bindings: Bindings }>().get('/', async (c
 
   let database: 'connected' | 'disconnected';
   try {
-    database = await Promise.race([pingDatabase(c), timeout]);
+    database = await Promise.race([pingDatabase(c.env.HYPERDRIVE), timeout]);
   } catch {
     database = 'disconnected';
   }
