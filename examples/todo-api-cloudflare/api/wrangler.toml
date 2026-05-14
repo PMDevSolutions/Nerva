@@ -1,0 +1,19 @@
+name = "todo-api"
+main = "src/index.ts"
+compatibility_date = "2025-12-01"
+compatibility_flags = ["nodejs_compat"]
+
+[dev]
+port = 8787
+local_protocol = "http"
+
+# D1 Database binding
+# Create with: npx wrangler d1 create todo-db
+# Then replace the database_id below
+[[d1_databases]]
+binding = "DB"
+database_name = "todo-db"
+database_id = "<YOUR_D1_DATABASE_ID>"
+
+[vars]
+ENVIRONMENT = "development"
