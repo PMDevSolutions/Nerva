@@ -157,10 +157,14 @@ PKGJSON
 success "package.json created."
 
 step "Installing production dependencies..."
+# NOTE: keep these versions in sync with templates/snippets/package.json — the
+# typecheck-templates CI job runs tsc against the snippets using those deps.
 run_cmd pnpm add hono drizzle-orm postgres zod @hono/zod-validator
 success "Production dependencies installed."
 
 step "Installing dev dependencies..."
+# NOTE: @types/node and @cloudflare/workers-types (added per-platform below)
+# also live in templates/snippets/package.json — bump in both places.
 run_cmd pnpm add -D vitest typescript eslint prettier drizzle-kit @types/node tsx \
   @eslint/js typescript-eslint @vitest/coverage-v8
 success "Dev dependencies installed."
