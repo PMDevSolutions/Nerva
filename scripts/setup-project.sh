@@ -175,6 +175,7 @@ import { etag } from 'hono/etag';
 import { logger } from 'hono/logger';
 import { requestId } from 'hono/request-id';
 import { secureHeaders } from 'hono/secure-headers';
+import { healthRoutes } from './routes/health';
 // Note: Response compression is handled automatically by Cloudflare's edge network.
 // No compress() middleware is needed for Workers deployments.
 
@@ -182,6 +183,8 @@ type Bindings = {
   DB: D1Database;
   KV: KVNamespace;
   HYPERDRIVE: Hyperdrive;
+  APP_VERSION: string;
+  HEALTH_DB_TIMEOUT_MS: string;
   ENVIRONMENT: string;
   LOG_LEVEL: string;
 };
@@ -194,13 +197,7 @@ app.use('*', etag());
 app.use('*', secureHeaders());
 app.use('*', requestId());
 
-app.get('/health', (c) => {
-  return c.json({
-    status: 'ok',
-    requestId: c.get('requestId'),
-    timestamp: new Date().toISOString(),
-  });
-});
+app.route('/health', healthRoutes);
 
 app.get('/', (c) => {
   return c.json({ message: 'Nerva API', version: '0.0.1' });
@@ -218,6 +215,7 @@ import { logger } from 'hono/logger';
 import { requestId } from 'hono/request-id';
 import { secureHeaders } from 'hono/secure-headers';
 import { serve } from '@hono/node-server';
+import { healthRoutes } from './routes/health';
 
 const app = new Hono();
 
@@ -228,13 +226,7 @@ app.use('*', etag());
 app.use('*', secureHeaders());
 app.use('*', requestId());
 
-app.get('/health', (c) => {
-  return c.json({
-    status: 'ok',
-    requestId: c.get('requestId'),
-    timestamp: new Date().toISOString(),
-  });
-});
+app.route('/health', healthRoutes);
 
 app.get('/', (c) => {
   return c.json({ message: 'Nerva API', version: '0.0.1' });
@@ -303,18 +295,25 @@ export const users = pgTable('users', {
 });
 SEOF
 
-write_file "$API_DIR/src/db/seed.ts" << 'SEEDEOF'
+write_file "$API_DIR/src/db/client.ts" << 'CEOF'
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from './schema.js';
 
+const databaseUrl = process.env.DATABASE_URL;
+if (!databaseUrl) {
+  throw new Error('DATABASE_URL environment variable is required');
+}
+
+export const client = postgres(databaseUrl);
+export const db = drizzle(client, { schema });
+CEOF
+
+write_file "$API_DIR/src/db/seed.ts" << 'SEEDEOF'
+import { client, db } from './client.js';
+import * as schema from './schema.js';
+
 async function seed(): Promise<void> {
-  const databaseUrl = process.env.DATABASE_URL;
-  if (!databaseUrl) {
-    throw new Error('DATABASE_URL environment variable is required');
-  }
-  const client = postgres(databaseUrl);
-  const db = drizzle(client, { schema });
   console.log('Seeding database...');
   await db.insert(schema.users).values([
     { email: 'admin@example.com', name: 'Admin User' },
@@ -330,6 +329,113 @@ seed().catch((err) => {
 });
 SEEDEOF
 
+if [[ "$PLATFORM" == "cloudflare" ]]; then
+  write_file "$API_DIR/src/db/ping.ts" << 'PEOF'
+import postgres from 'postgres';
+
+export async function pingDatabase(
+  hyperdrive: Hyperdrive | undefined,
+): Promise<'connected' | 'disconnected'> {
+  if (!hyperdrive?.connectionString) return 'disconnected';
+  const sql = postgres(hyperdrive.connectionString, {
+    max: 1,
+    fetch_types: false,
+  });
+  try {
+    await sql`SELECT 1`;
+    return 'connected';
+  } catch {
+    return 'disconnected';
+  } finally {
+    void sql.end({ timeout: 1 }).catch(() => {});
+  }
+}
+PEOF
+
+  write_file "$API_DIR/src/routes/health.ts" << 'HEOF'
+import { Hono } from 'hono';
+import { pingDatabase } from '../db/ping';
+
+const startTime = Date.now();
+
+type Bindings = {
+  HYPERDRIVE: Hyperdrive;
+  APP_VERSION: string;
+  HEALTH_DB_TIMEOUT_MS: string;
+};
+
+export const healthRoutes = new Hono<{ Bindings: Bindings }>().get('/', async (c) => {
+  const timeoutMs = Number(c.env.HEALTH_DB_TIMEOUT_MS) || 2000;
+  const timeout = new Promise<'disconnected'>((resolve) =>
+    setTimeout(() => resolve('disconnected'), timeoutMs),
+  );
+
+  let database: 'connected' | 'disconnected';
+  try {
+    database = await Promise.race([pingDatabase(c.env.HYPERDRIVE), timeout]);
+  } catch {
+    database = 'disconnected';
+  }
+
+  const status = database === 'connected' ? 'healthy' : 'unhealthy';
+  const body = {
+    status,
+    version: c.env.APP_VERSION ?? 'unknown',
+    uptime: Math.floor((Date.now() - startTime) / 1000),
+    timestamp: new Date().toISOString(),
+    requestId: c.get('requestId'),
+    checks: { database },
+  };
+  return c.json(body, status === 'healthy' ? 200 : 503);
+});
+HEOF
+else
+  write_file "$API_DIR/src/db/ping.ts" << 'PEOF'
+import { client } from './client.js';
+
+export async function pingDatabase(): Promise<'connected' | 'disconnected'> {
+  try {
+    await client`SELECT 1`;
+    return 'connected';
+  } catch {
+    return 'disconnected';
+  }
+}
+PEOF
+
+  write_file "$API_DIR/src/routes/health.ts" << 'HEOF'
+import { Hono } from 'hono';
+import { pingDatabase } from '../db/ping';
+
+const startTime = Date.now();
+
+export const healthRoutes = new Hono().get('/', async (c) => {
+  const timeoutMs = Number(process.env.HEALTH_DB_TIMEOUT_MS) || 2000;
+  const timeout = new Promise<'disconnected'>((resolve) =>
+    setTimeout(() => resolve('disconnected'), timeoutMs),
+  );
+
+  let database: 'connected' | 'disconnected';
+  try {
+    database = await Promise.race([pingDatabase(), timeout]);
+  } catch {
+    database = 'disconnected';
+  }
+
+  const status = database === 'connected' ? 'healthy' : 'unhealthy';
+  const body = {
+    status,
+    version: process.env.APP_VERSION ?? 'unknown',
+    uptime: Math.floor((Date.now() - startTime) / 1000),
+    timestamp: new Date().toISOString(),
+    requestId: c.get('requestId'),
+    checks: { database },
+  };
+  return c.json(body, status === 'healthy' ? 200 : 503);
+});
+HEOF
+fi
+
 write_file "$API_DIR/tests/setup.ts" << 'TSEOF'
 import { beforeAll, afterAll } from 'vitest';
 
@@ -342,42 +448,212 @@ afterAll(() => {
 });
 TSEOF
 
-write_file "$API_DIR/tests/unit/health.test.ts" << 'HTEOF'
-import { describe, it, expect } from 'vitest';
+if [[ "$PLATFORM" == "cloudflare" ]]; then
+  write_file "$API_DIR/tests/unit/health.test.ts" << 'HTEOF'
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Hono } from 'hono';
 import { requestId } from 'hono/request-id';
+import { pingDatabase } from '../../src/db/ping';
+import { healthRoutes } from '../../src/routes/health';
+
+vi.mock('../../src/db/ping', () => ({
+  pingDatabase: vi.fn(),
+}));
+
+interface HealthBody {
+  status: 'healthy' | 'unhealthy';
+  version: string;
+  uptime: number;
+  timestamp: string;
+  requestId: string;
+  checks: { database: 'connected' | 'disconnected' };
+}
+
+type TestEnv = {
+  APP_VERSION: string;
+  HEALTH_DB_TIMEOUT_MS: string;
+  HYPERDRIVE: Hyperdrive | undefined;
+};
+
+const env: TestEnv = {
+  APP_VERSION: '0.0.1',
+  HEALTH_DB_TIMEOUT_MS: '2000',
+  HYPERDRIVE: undefined,
+};
+
+const makeApp = () => {
+  const app = new Hono<{ Bindings: TestEnv }>();
+  app.use('*', requestId());
+  app.route('/health', healthRoutes);
+  return app;
+};
+
+const mockedPing = vi.mocked(pingDatabase);
 
 describe('Health endpoint', () => {
-  const app = new Hono();
-  app.use('*', requestId());
-  app.get('/health', (c) =>
-    c.json({
-      status: 'ok',
-      requestId: c.get('requestId'),
-    }),
-  );
-
-  it('should return ok status', async () => {
-    const res = await app.request('/health');
-    expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.status).toBe('ok');
+  beforeEach(() => {
+    mockedPing.mockReset();
   });
 
-  it('should return a requestId', async () => {
-    const res = await app.request('/health');
-    const body = await res.json();
-    expect(body.requestId).toBeDefined();
+  it('returns 200 + healthy when DB is connected', async () => {
+    mockedPing.mockResolvedValue('connected');
+    const res = await makeApp().request('/health', {}, env);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as HealthBody;
+    expect(body.status).toBe('healthy');
+    expect(body.checks.database).toBe('connected');
+  });
+
+  it('returns version from APP_VERSION binding', async () => {
+    mockedPing.mockResolvedValue('connected');
+    const res = await makeApp().request('/health', {}, env);
+    const body = (await res.json()) as HealthBody;
+    expect(body.version).toBe('0.0.1');
+  });
+
+  it('returns numeric uptime >= 0', async () => {
+    mockedPing.mockResolvedValue('connected');
+    const res = await makeApp().request('/health', {}, env);
+    const body = (await res.json()) as HealthBody;
+    expect(typeof body.uptime).toBe('number');
+    expect(body.uptime).toBeGreaterThanOrEqual(0);
+  });
+
+  it('returns 503 + unhealthy when DB is disconnected', async () => {
+    mockedPing.mockResolvedValue('disconnected');
+    const res = await makeApp().request('/health', {}, env);
+    expect(res.status).toBe(503);
+    const body = (await res.json()) as HealthBody;
+    expect(body.status).toBe('unhealthy');
+    expect(body.checks.database).toBe('disconnected');
+  });
+
+  it('returns 503 when ping exceeds timeout', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    mockedPing.mockImplementation(() => new Promise(() => {}));
+    const reqPromise = makeApp().request('/health', {}, env);
+    await vi.advanceTimersByTimeAsync(2001);
+    const res = await reqPromise;
+    expect(res.status).toBe(503);
+    vi.useRealTimers();
+  });
+
+  it('returns 503 when ping throws (never 500)', async () => {
+    mockedPing.mockRejectedValue(new Error('boom'));
+    const res = await makeApp().request('/health', {}, env);
+    expect(res.status).toBe(503);
+  });
+
+  it('preserves requestId in body and X-Request-Id header', async () => {
+    mockedPing.mockResolvedValue('connected');
+    const res = await makeApp().request('/health', {}, env);
+    const body = (await res.json()) as HealthBody;
     expect(typeof body.requestId).toBe('string');
     expect(body.requestId.length).toBeGreaterThan(0);
-  });
-
-  it('should include X-Request-Id response header', async () => {
-    const res = await app.request('/health');
     expect(res.headers.get('X-Request-Id')).not.toBeNull();
   });
 });
 HTEOF
+else
+  write_file "$API_DIR/tests/unit/health.test.ts" << 'HTEOF'
+import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
+import { Hono } from 'hono';
+import { requestId } from 'hono/request-id';
+import { pingDatabase } from '../../src/db/ping';
+import { healthRoutes } from '../../src/routes/health';
+
+vi.mock('../../src/db/ping', () => ({
+  pingDatabase: vi.fn(),
+}));
+
+interface HealthBody {
+  status: 'healthy' | 'unhealthy';
+  version: string;
+  uptime: number;
+  timestamp: string;
+  requestId: string;
+  checks: { database: 'connected' | 'disconnected' };
+}
+
+const makeApp = () => {
+  const app = new Hono();
+  app.use('*', requestId());
+  app.route('/health', healthRoutes);
+  return app;
+};
+
+const mockedPing = vi.mocked(pingDatabase);
+
+beforeAll(() => {
+  process.env.APP_VERSION = '0.0.1';
+  process.env.HEALTH_DB_TIMEOUT_MS = '2000';
+});
+
+describe('Health endpoint', () => {
+  beforeEach(() => {
+    mockedPing.mockReset();
+  });
+
+  it('returns 200 + healthy when DB is connected', async () => {
+    mockedPing.mockResolvedValue('connected');
+    const res = await makeApp().request('/health');
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as HealthBody;
+    expect(body.status).toBe('healthy');
+    expect(body.checks.database).toBe('connected');
+  });
+
+  it('returns version from APP_VERSION env', async () => {
+    mockedPing.mockResolvedValue('connected');
+    const res = await makeApp().request('/health');
+    const body = (await res.json()) as HealthBody;
+    expect(body.version).toBe('0.0.1');
+  });
+
+  it('returns numeric uptime >= 0', async () => {
+    mockedPing.mockResolvedValue('connected');
+    const res = await makeApp().request('/health');
+    const body = (await res.json()) as HealthBody;
+    expect(typeof body.uptime).toBe('number');
+    expect(body.uptime).toBeGreaterThanOrEqual(0);
+  });
+
+  it('returns 503 + unhealthy when DB is disconnected', async () => {
+    mockedPing.mockResolvedValue('disconnected');
+    const res = await makeApp().request('/health');
+    expect(res.status).toBe(503);
+    const body = (await res.json()) as HealthBody;
+    expect(body.status).toBe('unhealthy');
+    expect(body.checks.database).toBe('disconnected');
+  });
+
+  it('returns 503 when ping exceeds timeout', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    mockedPing.mockImplementation(() => new Promise(() => {}));
+    const reqPromise = makeApp().request('/health');
+    await vi.advanceTimersByTimeAsync(2001);
+    const res = await reqPromise;
+    expect(res.status).toBe(503);
+    vi.useRealTimers();
+  });
+
+  it('returns 503 when ping throws (never 500)', async () => {
+    mockedPing.mockRejectedValue(new Error('boom'));
+    const res = await makeApp().request('/health');
+    expect(res.status).toBe(503);
+  });
+
+  it('preserves requestId in body and X-Request-Id header', async () => {
+    mockedPing.mockResolvedValue('connected');
+    const res = await makeApp().request('/health');
+    const body = (await res.json()) as HealthBody;
+    expect(typeof body.requestId).toBe('string');
+    expect(body.requestId.length).toBeGreaterThan(0);
+    expect(res.headers.get('X-Request-Id')).not.toBeNull();
+  });
+});
+HTEOF
+fi
 
 success "Initial source files created."
 
@@ -397,6 +673,8 @@ if [[ "$PLATFORM" == "cloudflare" ]]; then
 ENVIRONMENT=development
 LOG_LEVEL=debug
 DATABASE_URL=postgresql://nerva:nerva_secret@localhost:5432/nerva_db
+APP_VERSION=0.0.1
+HEALTH_DB_TIMEOUT_MS=2000
 DVEOF
 
   success "Cloudflare Workers configured. Edit wrangler.toml with your resource IDs."
@@ -410,6 +688,8 @@ NODE_ENV=development
 PORT=3000
 DATABASE_URL=postgresql://nerva:nerva_secret@localhost:5432/nerva_db
 LOG_LEVEL=debug
+APP_VERSION=0.0.1
+HEALTH_DB_TIMEOUT_MS=2000
 ENVEOF
 
   success "Node.js / Docker configured."

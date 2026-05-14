@@ -3,3 +3,5 @@
 #   cp .dev.vars.example .dev.vars
 
 ENVIRONMENT=development
+APP_VERSION=0.0.1
+HEALTH_DB_TIMEOUT_MS=2000

@@ -17,3 +17,5 @@ database_id = "<YOUR_D1_DATABASE_ID>"
 
 [vars]
 ENVIRONMENT = "development"
+APP_VERSION = "0.0.1"
+HEALTH_DB_TIMEOUT_MS = "2000"
