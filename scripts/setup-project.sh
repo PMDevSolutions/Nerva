@@ -303,18 +303,25 @@ export const users = pgTable('users', {
 });
 SEOF
 
-write_file "$API_DIR/src/db/seed.ts" << 'SEEDEOF'
+write_file "$API_DIR/src/db/client.ts" << 'CEOF'
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from './schema.js';
 
+const databaseUrl = process.env.DATABASE_URL;
+if (!databaseUrl) {
+  throw new Error('DATABASE_URL environment variable is required');
+}
+
+export const client = postgres(databaseUrl);
+export const db = drizzle(client, { schema });
+CEOF
+
+write_file "$API_DIR/src/db/seed.ts" << 'SEEDEOF'
+import { client, db } from './client.js';
+import * as schema from './schema.js';
+
 async function seed(): Promise<void> {
-  const databaseUrl = process.env.DATABASE_URL;
-  if (!databaseUrl) {
-    throw new Error('DATABASE_URL environment variable is required');
-  }
-  const client = postgres(databaseUrl);
-  const db = drizzle(client, { schema });
   console.log('Seeding database...');
   await db.insert(schema.users).values([
     { email: 'admin@example.com', name: 'Admin User' },
