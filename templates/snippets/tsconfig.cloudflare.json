@@ -1,0 +1,20 @@
+{
+  "extends": "../shared/tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "moduleResolution": "bundler",
+    "types": ["@cloudflare/workers-types", "node"],
+    "rootDir": ".",
+    "rootDirs": ["shared/src", "cloudflare/src"],
+    "paths": {}
+  },
+  "include": [
+    "shared/src/**/*.ts",
+    "cloudflare/src/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "**/tests/**",
+    "node/**"
+  ]
+}

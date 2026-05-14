@@ -60,6 +60,30 @@ All checks must pass before a pull request will be reviewed.
 
 ---
 
+## Modifying generated-project templates
+
+`scripts/setup-project.sh` generates a fresh API project by copying TypeScript files out of `templates/snippets/`. Edit those files — not heredocs in the shell script — when you want to change what a generated project ships with.
+
+The layout under `templates/snippets/`:
+
+- `shared/` — files identical in both target platforms (Drizzle schema, postgres client, seed script, vitest setup)
+- `cloudflare/` — Workers-specific source (entry point, Hyperdrive ping, health route, test)
+- `node/` — Node-specific source (entry point, postgres-client ping, health route, test)
+
+A small typecheck scaffold (`templates/snippets/package.json`, `tsconfig.cloudflare.json`, `tsconfig.node.json`) lets you run `tsc --noEmit` against the snippets against the same dep versions the generated projects use. The `typecheck-templates` CI job runs this on every push.
+
+**When you bump a dep version,** update it in **both** `scripts/setup-project.sh`'s `pnpm add` lines **and** `templates/snippets/package.json` — the CI job catches type drift, but matching versions up front avoids the CI failure entirely. Both files have `NOTE:` comments cross-referencing each other.
+
+To run the typecheck locally:
+
+```bash
+cd templates/snippets
+pnpm install
+pnpm run typecheck   # runs both tsconfig.cloudflare.json and tsconfig.node.json
+```
+
+---
+
 ## Branch Naming Conventions
 
 Use the following prefixes when creating branches:

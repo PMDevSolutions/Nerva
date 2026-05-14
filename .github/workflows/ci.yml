@@ -201,6 +201,31 @@ jobs:
           echo "pnpm version: $(pnpm --version)"
           pnpm ls --depth 0
 
+  typecheck-templates:
+    name: Type-check Embedded Templates
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - run: corepack enable
+
+      - name: Install typecheck dependencies
+        run: pnpm install --frozen-lockfile
+        working-directory: templates/snippets
+
+      - name: Type-check Cloudflare snippets
+        run: pnpm exec tsc --noEmit -p tsconfig.cloudflare.json
+        working-directory: templates/snippets
+
+      - name: Type-check Node snippets
+        run: pnpm exec tsc --noEmit -p tsconfig.node.json
+        working-directory: templates/snippets
+
   check-links:
     name: Check Markdown Links
     runs-on: ubuntu-latest
