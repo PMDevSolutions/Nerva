@@ -6,6 +6,7 @@ import { logger } from 'hono/logger';
 import { requestId } from 'hono/request-id';
 import { secureHeaders } from 'hono/secure-headers';
 import { serve } from '@hono/node-server';
+import { config } from './config';
 import { healthRoutes } from './routes/health';
 
 const app = new Hono();
@@ -20,13 +21,12 @@ app.use('*', requestId());
 app.route('/health', healthRoutes);
 
 app.get('/', (c) => {
-  return c.json({ message: 'Nerva API', version: '0.0.1' });
+  return c.json({ message: 'Nerva API', version: config.APP_VERSION });
 });
 
-const port = Number(process.env.PORT) || 3000;
-console.log(`Server starting on port ${port}`);
+console.log(`Server starting on port ${config.PORT}`);
 
-const server = serve({ fetch: app.fetch, port });
+const server = serve({ fetch: app.fetch, port: config.PORT });
 
 // --- Graceful shutdown ---
 const SHUTDOWN_TIMEOUT_MS = 10_000;

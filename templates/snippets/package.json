@@ -15,6 +15,7 @@
     "drizzle-orm": "^0.45.2",
     "hono": "^4.12.14",
     "postgres": "^3.4.5",
-    "typescript": "^6.0.2"
+    "typescript": "^6.0.2",
+    "zod": "^4.4.3"
   }
 }

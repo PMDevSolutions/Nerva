@@ -1,12 +1,12 @@
 import { Hono } from 'hono';
+import { config } from '../config';
 import { pingDatabase } from '../db/ping';
 
 const startTime = Date.now();
 
 export const healthRoutes = new Hono().get('/', async (c) => {
-  const timeoutMs = Number(process.env.HEALTH_DB_TIMEOUT_MS) || 2000;
   const timeout = new Promise<'disconnected'>((resolve) =>
-    setTimeout(() => resolve('disconnected'), timeoutMs),
+    setTimeout(() => resolve('disconnected'), config.HEALTH_DB_TIMEOUT_MS),
   );
 
   let database: 'connected' | 'disconnected';
@@ -19,7 +19,7 @@ export const healthRoutes = new Hono().get('/', async (c) => {
   const status = database === 'connected' ? 'healthy' : 'unhealthy';
   const body = {
     status,
-    version: process.env.APP_VERSION ?? 'unknown',
+    version: config.APP_VERSION,
     uptime: Math.floor((Date.now() - startTime) / 1000),
     timestamp: new Date().toISOString(),
     requestId: c.get('requestId'),
