@@ -1,6 +1,6 @@
 {
   "name": "nerva",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Claude Code-integrated API & backend development framework with TypeScript, Hono, Drizzle ORM, and automated schema-to-API pipelines",
   "private": true,
   "type": "module",
