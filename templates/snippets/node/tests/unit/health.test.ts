@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Hono } from 'hono';
 import { requestId } from 'hono/request-id';
 import { pingDatabase } from '../../src/db/ping';
@@ -25,11 +25,6 @@ const makeApp = () => {
 };
 
 const mockedPing = vi.mocked(pingDatabase);
-
-beforeAll(() => {
-  process.env.APP_VERSION = '0.0.1';
-  process.env.HEALTH_DB_TIMEOUT_MS = '2000';
-});
 
 describe('Health endpoint', () => {
   beforeEach(() => {

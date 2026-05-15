@@ -173,8 +173,10 @@ step "Creating initial source files..."
 
 if [[ "$PLATFORM" == "cloudflare" ]]; then
   copy_file "$TEMPLATES_DIR/snippets/cloudflare/src/index.ts" "$API_DIR/src/index.ts"
+  copy_file "$TEMPLATES_DIR/snippets/cloudflare/src/config.ts" "$API_DIR/src/config.ts"
 else
   copy_file "$TEMPLATES_DIR/snippets/node/src/index.ts" "$API_DIR/src/index.ts"
+  copy_file "$TEMPLATES_DIR/snippets/node/src/config.ts" "$API_DIR/src/config.ts"
   run_cmd pnpm add @hono/node-server
 fi
 
@@ -233,6 +235,8 @@ LOG_LEVEL=debug
 DATABASE_URL=postgresql://nerva:nerva_secret@localhost:5432/nerva_db
 APP_VERSION=0.0.1
 HEALTH_DB_TIMEOUT_MS=2000
+# Required: at least 32 characters. Generate with: openssl rand -hex 32
+JWT_SECRET=replace-me-with-a-secure-32+-character-secret
 DVEOF
 
   success "Cloudflare Workers configured. Edit wrangler.toml with your resource IDs."
@@ -248,6 +252,8 @@ DATABASE_URL=postgresql://nerva:nerva_secret@localhost:5432/nerva_db
 LOG_LEVEL=debug
 APP_VERSION=0.0.1
 HEALTH_DB_TIMEOUT_MS=2000
+# Required in production (min 32 chars). Generate with: openssl rand -hex 32
+JWT_SECRET=dev-secret-change-me-in-production-min-32-chars
 ENVEOF
 
   success "Node.js / Docker configured."

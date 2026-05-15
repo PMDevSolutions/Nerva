@@ -21,12 +21,18 @@ type TestEnv = {
   APP_VERSION: string;
   HEALTH_DB_TIMEOUT_MS: string;
   HYPERDRIVE: Hyperdrive | undefined;
+  JWT_SECRET: string;
+  ENVIRONMENT: string;
+  LOG_LEVEL: string;
 };
 
 const env: TestEnv = {
   APP_VERSION: '0.0.1',
   HEALTH_DB_TIMEOUT_MS: '2000',
   HYPERDRIVE: undefined,
+  JWT_SECRET: 'test-secret-for-unit-tests-min-32-characters',
+  ENVIRONMENT: 'development',
+  LOG_LEVEL: 'debug',
 };
 
 const makeApp = () => {
