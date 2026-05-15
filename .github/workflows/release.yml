@@ -49,7 +49,7 @@ jobs:
           if [ "${{ inputs.release_type }}" = "auto" ]; then
             pnpm release
           else
-            pnpm release -- --release-as ${{ inputs.release_type }}
+            pnpm release --release-as ${{ inputs.release_type }}
           fi
 
           # Extract the new version from package.json
