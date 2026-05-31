@@ -579,9 +579,12 @@ describe('Books API', () => {
     });
   });
 
-  // --- DELETE BOOK ---
+  // --- DELETE BOOK (soft delete) ---
+  // When database.softDeleteDefault is true, DELETE stamps deleted_at instead of
+  // physically removing the row. Deleted books disappear from normal reads (404)
+  // but remain visible to admins via ?include_deleted=true.
   describe('DELETE /books/:id', () => {
-    it('should delete a book when authenticated as admin', async () => {
+    it('should soft-delete a book when authenticated as admin', async () => {
       const book = await createTestBook();
       const admin = await createTestAdmin();
       const token = await generateTestToken(admin.id, 'admin');
@@ -593,9 +596,60 @@ describe('Books API', () => {
 
       expect(res.status).toBe(204);
 
-      // Verify it is gone
+      // Hidden from normal reads
       const getRes = await app.request(`/books/${book.id}`);
       expect(getRes.status).toBe(404);
+    });
+
+    it('should hide soft-deleted books from the default list', async () => {
+      const book = await createTestBook();
+      const admin = await createTestAdmin();
+      const token = await generateTestToken(admin.id, 'admin');
+
+      await app.request(`/books/${book.id}`, {
+        method: 'DELETE',
+        headers: authHeader(token),
+      });
+
+      const listRes = await app.request('/books');
+      const body = (await listRes.json()) as { data: Array<{ id: string }> };
+      expect(body.data.find((b) => b.id === book.id)).toBeUndefined();
+    });
+
+    it('should still expose soft-deleted books to admins via ?include_deleted=true', async () => {
+      const book = await createTestBook();
+      const admin = await createTestAdmin();
+      const token = await generateTestToken(admin.id, 'admin');
+
+      await app.request(`/books/${book.id}`, {
+        method: 'DELETE',
+        headers: authHeader(token),
+      });
+
+      const listRes = await app.request('/books?include_deleted=true', {
+        headers: authHeader(token),
+      });
+      const body = (await listRes.json()) as { data: Array<{ id: string }> };
+      expect(body.data.find((b) => b.id === book.id)).toBeDefined();
+    });
+
+    it('should return 404 when deleting an already-deleted book', async () => {
+      const book = await createTestBook();
+      const admin = await createTestAdmin();
+      const token = await generateTestToken(admin.id, 'admin');
+
+      const first = await app.request(`/books/${book.id}`, {
+        method: 'DELETE',
+        headers: authHeader(token),
+      });
+      expect(first.status).toBe(204);
+
+      // Second delete is idempotent: the row is already deleted, so 404.
+      const second = await app.request(`/books/${book.id}`, {
+        method: 'DELETE',
+        headers: authHeader(token),
+      });
+      expect(second.status).toBe(404);
     });
 
     it('should return 404 for non-existent book', async () => {

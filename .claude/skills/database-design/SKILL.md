@@ -173,6 +173,7 @@ import {
   text,
   timestamp,
   uniqueIndex,
+  index,
 } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 import { userRoleEnum } from './enums';
@@ -193,9 +194,14 @@ export const users = pgTable(
       .defaultNow()
       .notNull()
       .$onUpdate(() => new Date()),
+    // Soft delete: NULL = live, timestamp = deleted. Added to every table when
+    // `database.softDeleteDefault` is true in pipeline.config.json (Step 6a).
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
   },
   (table) => [
     uniqueIndex('users_email_idx').on(table.email),
+    // Partial index keeps lookups of live rows fast even with many deleted rows.
+    index('users_deleted_at_idx').on(table.deletedAt),
   ],
 );
 
@@ -349,6 +355,103 @@ export const orderItemsRelations = relations(orderItems, ({ one }) => ({
 }));
 ```
 
+### Step 6a -- Soft Delete Columns (when enabled)
+
+Read `database.softDeleteDefault` from `.claude/pipeline.config.json`. When it is
+`true` (the default), **every** generated table gets a nullable `deleted_at`
+column plus an index, and a shared soft-delete helper module is generated.
+
+```typescript
+// Add to the column block of every pgTable (after createdAt/updatedAt):
+deletedAt: timestamp('deleted_at', { withTimezone: true }),
+```
+
+```typescript
+// Add to the index block of every table:
+index('<table>_deleted_at_idx').on(table.deletedAt),
+```
+
+`deleted_at` is intentionally **nullable with no default** — `NULL` means the row
+is live, a timestamp means it was soft-deleted. Do not add `.notNull()` or a
+default. Join/pivot tables that are physically deleted via `ON DELETE CASCADE`
+(e.g. `order_items`) may opt out — only add `deleted_at` to top-level resources.
+
+Then generate the shared helper module once per project. It provides the query
+filter and the `softDelete()` mutation consumed by the service layer in Phase 3
+(`route-generation`):
+
+```typescript
+// api/src/db/soft-delete.ts
+import { and, eq, isNull, type SQL } from 'drizzle-orm';
+import type {
+  PgColumn,
+  PgDatabase,
+  PgQueryResultHKT,
+  PgTable,
+  PgUpdateSetSource,
+} from 'drizzle-orm/pg-core';
+import { z } from 'zod';
+
+export interface SoftDeleteColumns {
+  id: PgColumn;
+  deletedAt: PgColumn;
+}
+export type SoftDeleteTable = PgTable & SoftDeleteColumns;
+
+/** `WHERE deleted_at IS NULL` — add to the where clause of every read query. */
+export function notDeleted(table: SoftDeleteColumns): SQL {
+  return isNull(table.deletedAt);
+}
+
+/** AND the not-deleted filter with extra conditions (undefined ones ignored). */
+export function withNotDeleted(
+  table: SoftDeleteColumns,
+  ...conditions: Array<SQL | undefined>
+): SQL | undefined {
+  return and(notDeleted(table), ...conditions);
+}
+
+/** Build a where clause honouring the `?include_deleted=true` admin flag. */
+export function softDeleteFilter(
+  table: SoftDeleteColumns,
+  includeDeleted: boolean,
+  ...conditions: Array<SQL | undefined>
+): SQL | undefined {
+  return includeDeleted
+    ? and(...conditions)
+    : and(notDeleted(table), ...conditions);
+}
+
+/** Stamp deleted_at instead of deleting. Returns rows affected (0 or 1). */
+export async function softDelete<TTable extends SoftDeleteTable>(
+  db: PgDatabase<PgQueryResultHKT>,
+  table: TTable,
+  id: string | number,
+): Promise<number> {
+  const result = await db
+    .update(table)
+    .set({ deletedAt: new Date() } as unknown as PgUpdateSetSource<TTable>)
+    .where(and(eq(table.id, id), notDeleted(table)))
+    .returning({ id: table.id });
+  return result.length;
+}
+
+/** Query-param schema: `?include_deleted=true` for admin endpoints. */
+export const includeDeletedQuerySchema = z.object({
+  include_deleted: z
+    .enum(['true', 'false'])
+    .optional()
+    .default('false')
+    .transform((value) => value === 'true'),
+});
+export type IncludeDeletedQuery = z.infer<typeof includeDeletedQuerySchema>;
+```
+
+This module is also shipped as a template snippet
+(`templates/snippets/shared/src/db/soft-delete.ts`) and is copied automatically by
+`setup-project.sh`. When `softDeleteDefault` is `false`, omit the `deleted_at`
+columns and do not generate this module.
+
 ### Step 7 -- Generate Barrel Export
 
 ```typescript
@@ -410,6 +513,7 @@ export type UpdateUser = z.infer<typeof updateUserSchema>;
 import { createInsertSchema, createSelectSchema } from 'drizzle-zod';
 import { z } from 'zod';
 import { books } from '../db/schema/books';
+import { includeDeletedQuerySchema } from '../db/soft-delete';
 
 export const insertBookSchema = createInsertSchema(books, {
   title: z.string().min(1).max(500),
@@ -427,15 +531,19 @@ export const selectBookSchema = createSelectSchema(books);
 
 export const updateBookSchema = insertBookSchema.partial();
 
-// Query params for list endpoint
-export const listBooksQuerySchema = z.object({
-  page: z.coerce.number().int().min(1).default(1),
-  limit: z.coerce.number().int().min(1).max(100).default(20),
-  search: z.string().optional(),
-  author: z.string().optional(),
-  sortBy: z.enum(['title', 'author', 'price', 'createdAt']).default('createdAt'),
-  sortOrder: z.enum(['asc', 'desc']).default('desc'),
-});
+// Query params for list endpoint.
+// `.merge(includeDeletedQuerySchema)` adds the `?include_deleted=true` flag used
+// by admin endpoints to also return soft-deleted rows. Defaults to false.
+export const listBooksQuerySchema = z
+  .object({
+    page: z.coerce.number().int().min(1).default(1),
+    limit: z.coerce.number().int().min(1).max(100).default(20),
+    search: z.string().optional(),
+    author: z.string().optional(),
+    sortBy: z.enum(['title', 'author', 'price', 'createdAt']).default('createdAt'),
+    sortOrder: z.enum(['asc', 'desc']).default('desc'),
+  })
+  .merge(includeDeletedQuerySchema);
 
 export type InsertBook = z.infer<typeof insertBookSchema>;
 export type SelectBook = z.infer<typeof selectBookSchema>;
@@ -505,7 +613,8 @@ CREATE TABLE IF NOT EXISTS "users" (
   "name" text NOT NULL,
   "role" "user_role" DEFAULT 'customer' NOT NULL,
   "created_at" timestamp with time zone DEFAULT now() NOT NULL,
-  "updated_at" timestamp with time zone DEFAULT now() NOT NULL
+  "updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+  "deleted_at" timestamp with time zone
 );
 
 CREATE TABLE IF NOT EXISTS "books" (
@@ -517,7 +626,8 @@ CREATE TABLE IF NOT EXISTS "books" (
   "stock" integer DEFAULT 0 NOT NULL,
   "description" text,
   "created_at" timestamp with time zone DEFAULT now() NOT NULL,
-  "updated_at" timestamp with time zone DEFAULT now() NOT NULL
+  "updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+  "deleted_at" timestamp with time zone
 );
 
 CREATE TABLE IF NOT EXISTS "orders" (
@@ -526,7 +636,8 @@ CREATE TABLE IF NOT EXISTS "orders" (
   "status" "order_status" DEFAULT 'pending' NOT NULL,
   "total" numeric(10, 2) NOT NULL,
   "created_at" timestamp with time zone DEFAULT now() NOT NULL,
-  "updated_at" timestamp with time zone DEFAULT now() NOT NULL
+  "updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+  "deleted_at" timestamp with time zone
 );
 
 CREATE TABLE IF NOT EXISTS "order_items" (
@@ -544,6 +655,11 @@ CREATE INDEX IF NOT EXISTS "books_author_idx" ON "books" USING btree ("author");
 CREATE INDEX IF NOT EXISTS "orders_user_id_idx" ON "orders" USING btree ("user_id");
 CREATE INDEX IF NOT EXISTS "order_items_order_id_idx" ON "order_items" USING btree ("order_id");
 CREATE INDEX IF NOT EXISTS "order_items_book_id_idx" ON "order_items" USING btree ("book_id");
+
+-- Soft-delete indexes (generated when database.softDeleteDefault is true)
+CREATE INDEX IF NOT EXISTS "users_deleted_at_idx" ON "users" USING btree ("deleted_at");
+CREATE INDEX IF NOT EXISTS "books_deleted_at_idx" ON "books" USING btree ("deleted_at");
+CREATE INDEX IF NOT EXISTS "orders_deleted_at_idx" ON "orders" USING btree ("deleted_at");
 ```
 
 ### Step 10 -- Install Dependencies
@@ -557,7 +673,8 @@ cd api && pnpm add -D drizzle-kit drizzle-zod
 
 | Artifact | Location | Description |
 |---|---|---|
-| Schema files | `api/src/db/schema/*.ts` | One Drizzle pgTable per model |
+| Schema files | `api/src/db/schema/*.ts` | One Drizzle pgTable per model (incl. `deleted_at`) |
+| Soft-delete helper | `api/src/db/soft-delete.ts` | `notDeleted`/`softDelete` filters (when `softDeleteDefault`) |
 | Enum definitions | `api/src/db/schema/enums.ts` | PostgreSQL enum types |
 | Schema barrel | `api/src/db/schema/index.ts` | Re-exports all schemas |
 | DB connection | `api/src/db/index.ts` | Drizzle client setup |
@@ -583,4 +700,5 @@ cd api && pnpm add -D drizzle-kit drizzle-zod
 - **Zod inference from Drizzle**: Single source of truth -- change the Drizzle schema, the Zod validators follow automatically.
 - **UUID primary keys**: Default for all tables. Avoids sequential ID enumeration attacks and works well in distributed systems.
 - **Soft timestamps**: `createdAt` and `updatedAt` on every table. `$onUpdate` handles automatic timestamp refresh.
+- **Soft deletes by default**: When `database.softDeleteDefault` is true, tables carry a nullable `deleted_at` column and rows are never physically removed. Reads filter `WHERE deleted_at IS NULL` via the generated `soft-delete.ts` helper, and DELETE handlers call `softDelete()`. Admin endpoints can opt back in to deleted rows with `?include_deleted=true`. See [route-generation](../route-generation/SKILL.md) for the handler pattern.
 - **snake_case columns**: PostgreSQL convention. Drizzle maps to camelCase in TypeScript automatically.
