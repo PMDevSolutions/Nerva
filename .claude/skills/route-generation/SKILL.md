@@ -240,6 +240,23 @@ export const requireRole = (...roles: string[]) =>
     }
     await next();
   });
+
+// Parses a bearer token when present but never rejects. Used on otherwise-public
+// routes that change behaviour for authenticated users -- e.g. a public list
+// endpoint that exposes soft-deleted rows to admins via ?include_deleted=true.
+export const optionalAuth = createMiddleware<AppEnv>(async (c, next) => {
+  const authHeader = c.req.header('Authorization');
+  if (authHeader?.startsWith('Bearer ')) {
+    try {
+      const { payload } = await jwtVerify(authHeader.slice(7), JWT_SECRET);
+      c.set('userId', payload.sub as string);
+      c.set('userRole', (payload.role as string) ?? 'customer');
+    } catch {
+      // Anonymous: ignore an invalid/expired token rather than 401.
+    }
+  }
+  await next();
+});
 ```
 
 ### Step 4 -- Create the Service Layer
@@ -248,20 +265,26 @@ One service per resource, encapsulating all database operations:
 
 ```typescript
 // api/src/services/books.service.ts
-import { eq, sql, ilike, asc, desc } from 'drizzle-orm';
+import { eq, sql, ilike, asc, desc, and } from 'drizzle-orm';
 import { books } from '../db/schema';
 import type { Database } from '../db';
 import type { InsertBook, UpdateBook, ListBooksQuery } from '../validators/books';
 import { NotFoundError, ConflictError } from '../middleware/error-handler';
+import { notDeleted, softDelete } from '../db/soft-delete';
 
 export class BooksService {
   constructor(private db: Database) {}
 
   async list(query: ListBooksQuery) {
-    const { page, limit, search, author, sortBy, sortOrder } = query;
+    const { page, limit, search, author, sortBy, sortOrder, include_deleted } = query;
     const offset = (page - 1) * limit;
 
     const conditions = [];
+    // Exclude soft-deleted rows unless an admin asked for them via
+    // ?include_deleted=true. This filter is applied to every read query.
+    if (!include_deleted) {
+      conditions.push(notDeleted(books));
+    }
     if (search) {
       conditions.push(ilike(books.title, `%${search}%`));
     }
@@ -269,9 +292,7 @@ export class BooksService {
       conditions.push(ilike(books.author, `%${author}%`));
     }
 
-    const whereClause = conditions.length
-      ? sql`${sql.join(conditions, sql` AND `)}`
-      : undefined;
+    const whereClause = and(...conditions);
 
     const [{ count }] = await this.db
       .select({ count: sql<number>`count(*)::int` })
@@ -301,8 +322,9 @@ export class BooksService {
   }
 
   async getById(id: string) {
+    // Soft-deleted books are treated as not found for normal reads.
     const book = await this.db.query.books.findFirst({
-      where: eq(books.id, id),
+      where: and(eq(books.id, id), notDeleted(books)),
     });
     if (!book) throw new NotFoundError('Book', id);
     return book;
@@ -322,25 +344,24 @@ export class BooksService {
 
   async update(id: string, data: UpdateBook) {
     const existing = await this.db.query.books.findFirst({
-      where: eq(books.id, id),
+      where: and(eq(books.id, id), notDeleted(books)),
     });
     if (!existing) throw new NotFoundError('Book', id);
 
     const [updated] = await this.db
       .update(books)
       .set(data)
-      .where(eq(books.id, id))
+      .where(and(eq(books.id, id), notDeleted(books)))
       .returning();
     return updated;
   }
 
   async delete(id: string) {
-    const existing = await this.db.query.books.findFirst({
-      where: eq(books.id, id),
-    });
-    if (!existing) throw new NotFoundError('Book', id);
-
-    await this.db.delete(books).where(eq(books.id, id));
+    // Soft delete: stamp deleted_at instead of removing the row. softDelete()
+    // returns 0 when the book is missing or already deleted (it guards on
+    // `deleted_at IS NULL`), which we surface as a 404.
+    const affected = await softDelete(this.db, books, id);
+    if (affected === 0) throw new NotFoundError('Book', id);
   }
 }
 ```
@@ -353,7 +374,7 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import type { AppEnv } from '../app';
 import { BooksService } from '../services/books.service';
-import { requireAuth, requireRole } from '../middleware/auth';
+import { requireAuth, requireRole, optionalAuth } from '../middleware/auth';
 import {
   insertBookSchema,
   updateBookSchema,
@@ -364,14 +385,22 @@ import { uuidParamSchema } from '../validators';
 export function booksRoutes() {
   const router = new Hono<AppEnv>();
 
-  // GET /books -- public, paginated list
+  // GET /books -- public, paginated list.
+  // listBooksQuerySchema includes `?include_deleted=true`, but only admins may
+  // use it: non-admins always get live rows only. Drop the flag unless the
+  // caller is an admin so soft-deleted rows are never exposed publicly.
   router.get(
     '/',
+    optionalAuth,
     zValidator('query', listBooksQuerySchema),
     async (c) => {
       const query = c.req.valid('query');
+      const isAdmin = c.get('userRole') === 'admin';
       const service = new BooksService(c.get('db'));
-      const result = await service.list(query);
+      const result = await service.list({
+        ...query,
+        include_deleted: query.include_deleted && isAdmin,
+      });
       return c.json(result);
     },
   );
@@ -418,7 +447,9 @@ export function booksRoutes() {
     },
   );
 
-  // DELETE /books/:id -- admin only
+  // DELETE /books/:id -- admin only.
+  // Soft delete: service.delete() stamps deleted_at via softDelete() rather than
+  // physically removing the row. The response is still 204 No Content.
   router.delete(
     '/:id',
     requireAuth,

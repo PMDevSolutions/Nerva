@@ -197,6 +197,7 @@ DEOF
 
 copy_file "$TEMPLATES_DIR/snippets/shared/src/db/schema.ts" "$API_DIR/src/db/schema.ts"
 copy_file "$TEMPLATES_DIR/snippets/shared/src/db/client.ts" "$API_DIR/src/db/client.ts"
+copy_file "$TEMPLATES_DIR/snippets/shared/src/db/soft-delete.ts" "$API_DIR/src/db/soft-delete.ts"
 copy_file "$TEMPLATES_DIR/snippets/shared/src/db/seed.ts" "$API_DIR/src/db/seed.ts"
 
 if [[ "$PLATFORM" == "cloudflare" ]]; then
@@ -208,6 +209,7 @@ else
 fi
 
 copy_file "$TEMPLATES_DIR/snippets/shared/tests/setup.ts" "$API_DIR/tests/setup.ts"
+copy_file "$TEMPLATES_DIR/snippets/shared/tests/soft-delete.test.ts" "$API_DIR/tests/soft-delete.test.ts"
 
 if [[ "$PLATFORM" == "cloudflare" ]]; then
   copy_file "$TEMPLATES_DIR/snippets/cloudflare/tests/unit/health.test.ts" "$API_DIR/tests/unit/health.test.ts"
