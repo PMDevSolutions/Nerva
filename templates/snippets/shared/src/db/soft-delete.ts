@@ -1,4 +1,10 @@
-import { and, eq, isNull, type SQL } from 'drizzle-orm';
+import {
+  and,
+  eq,
+  isNull,
+  type SQL,
+  type TablesRelationalConfig,
+} from 'drizzle-orm';
 import type {
   PgColumn,
   PgDatabase,
@@ -92,8 +98,13 @@ export function softDeleteFilter(
  *   const affected = await softDelete(db, users, id);
  *   if (affected === 0) throw new NotFoundError('User', id);
  */
-export async function softDelete<TTable extends SoftDeleteTable>(
-  db: PgDatabase<PgQueryResultHKT>,
+export async function softDelete<
+  TTable extends SoftDeleteTable,
+  TQueryResult extends PgQueryResultHKT,
+  TFullSchema extends Record<string, unknown>,
+  TSchema extends TablesRelationalConfig,
+>(
+  db: PgDatabase<TQueryResult, TFullSchema, TSchema>,
   table: TTable,
   id: string | number,
 ): Promise<number> {
