@@ -317,6 +317,8 @@ app.use("*", cors({
 }));
 ```
 
+See the [CORS configuration guide](./cors-configuration.md) for environment-specific setups, credentials mode, preflight caching, and how to debug common CORS errors.
+
 ## Error Handling
 
 ### Consistent Response Format
