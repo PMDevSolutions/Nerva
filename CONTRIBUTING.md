@@ -158,6 +158,34 @@ Community members are encouraged to vote on priorities and propose new ideas via
 
 ---
 
+## Contributor Recognition
+
+Nerva follows the [All Contributors](https://allcontributors.org) specification: every kind of contribution counts, not just code. Recognized contributors appear in the [contributors table](README.md#contributors) in the README.
+
+The contribution types most relevant to Nerva:
+
+| Type | Emoji | Covers |
+|------|-------|--------|
+| `code` | 💻 | Code contributions |
+| `doc` | 📖 | Documentation |
+| `test` | ⚠️ | Tests |
+| `bug` | 🐛 | Bug reports |
+| `ideas` | 🤔 | Ideas and suggestions |
+| `review` | 👀 | Code review |
+| `infra` | 🚇 | Infrastructure (CI/CD, deployment) |
+
+Other [emoji key](https://allcontributors.org/en/reference/emoji-key/) types count as well.
+
+**How recognition works:** once your contribution lands, a maintainer comments on the related issue or pull request:
+
+```text
+@all-contributors please add @<your-username> for code, doc
+```
+
+The [@all-contributors bot](https://allcontributors.org/en/bot/usage/) then opens a pull request adding you to the README table and `.all-contributorsrc`. If your contribution was overlooked, mention it on your PR or open an issue — recognition requests are always welcome.
+
+---
+
 ## Code of Conduct
 
 This project follows the [Contributor Covenant v2.1](CODE_OF_CONDUCT.md). All contributors are expected to:
