@@ -3,6 +3,7 @@ set -euo pipefail
 
 # ============================================================================
 # generate-openapi-docs.sh - Generate OpenAPI documentation from Hono routes
+#                            and regenerate the Postman collection from it
 # Usage: ./scripts/generate-openapi-docs.sh [--serve] [--port 8080]
 # ============================================================================
 
@@ -79,6 +80,7 @@ const spec: Record<string, unknown> = {
     '/health': {
       get: {
         summary: 'Health check',
+        tags: ['Health'],
         responses: {
           '200': {
             description: 'Service is healthy',
@@ -101,6 +103,7 @@ const spec: Record<string, unknown> = {
     '/': {
       get: {
         summary: 'API root',
+        tags: ['Health'],
         responses: {
           '200': {
             description: 'API information',
@@ -178,12 +181,14 @@ paths:
   /health:
     get:
       summary: Health check
+      tags: [Health]
       responses:
         "200":
           description: Service is healthy
   /:
     get:
       summary: API root
+      tags: [Health]
       responses:
         "200":
           description: API information
@@ -193,6 +198,67 @@ fi
 
 FILE_SIZE=$(wc -c < "$OUTPUT_FILE" | tr -d ' ')
 info "Spec size: ${FILE_SIZE} bytes"
+
+# ---- Postman collection ----
+POSTMAN_DIR="$PROJECT_ROOT/postman"
+POSTMAN_FILE="$POSTMAN_DIR/collection.json"
+
+# Re-applies Nerva conventions to the converted collection: the converter
+# names its server variable baseUrl (Nerva standardizes on base_url), and
+# the conversion has no knowledge of the auth_token injection script.
+postman_merge() {
+  node -e '
+const fs = require("fs");
+const file = process.argv[1];
+let raw = fs.readFileSync(file, "utf8");
+raw = raw.split("{{baseUrl}}").join("{{base_url}}");
+const col = JSON.parse(raw);
+const previous = (col.variable || []).find(function (v) {
+  return v.key === "baseUrl" || v.key === "base_url";
+});
+const vars = (col.variable || []).filter(function (v) {
+  return v.key !== "baseUrl" && v.key !== "base_url" && v.key !== "auth_token";
+});
+vars.push({
+  key: "base_url",
+  value: (previous && previous.value) || "http://localhost:3000",
+  type: "string",
+});
+vars.push({ key: "auth_token", value: "", type: "string" });
+col.variable = vars;
+const events = (col.event || []).filter(function (e) {
+  return e.listen !== "prerequest";
+});
+events.push({
+  listen: "prerequest",
+  script: {
+    type: "text/javascript",
+    exec: [
+      "// Inject the bearer token when auth_token is set in the active scope",
+      "const token = pm.variables.get(\"auth_token\");",
+      "if (token) {",
+      "  pm.request.headers.upsert({ key: \"Authorization\", value: \"Bearer \" + token });",
+      "}",
+    ],
+  },
+});
+col.event = events;
+fs.writeFileSync(file, JSON.stringify(col, null, 2) + "\n");
+' "$1"
+}
+
+echo ""
+info "Regenerating Postman collection from the OpenAPI spec..."
+mkdir -p "$POSTMAN_DIR"
+
+if npx --yes --package=openapi-to-postmanv2 openapi2postmanv2 \
+     -s "$OUTPUT_FILE" -o "$POSTMAN_FILE" -p \
+     -O folderStrategy=Tags > /dev/null \
+   && postman_merge "$POSTMAN_FILE"; then
+  success "Postman collection written to: $POSTMAN_FILE"
+else
+  warn "Could not regenerate the Postman collection (conversion or post-processing failed)."
+fi
 
 if [[ "$SERVE" == true ]]; then
   echo ""

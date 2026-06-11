@@ -261,6 +261,209 @@ ENVEOF
   success "Node.js / Docker configured."
 fi
 
+# ---- Postman collection ----
+step "Generating Postman collection..."
+
+if [[ "$PLATFORM" == "cloudflare" ]]; then
+  DEV_BASE_URL="http://localhost:8787"
+  PLATFORM_LABEL="Cloudflare Workers"
+  DEV_STEPS=$'npx wrangler dev          # start the local dev server'
+else
+  DEV_BASE_URL="http://localhost:3000"
+  PLATFORM_LABEL="Node.js / Docker"
+  DEV_STEPS=$'docker compose up -d      # start PostgreSQL\npnpm dev                  # start the dev server'
+fi
+
+make_dirs "$TARGET_DIR/postman"
+
+write_file "$TARGET_DIR/postman/collection.json" << COLEOF
+{
+  "info": {
+    "name": "$PROJECT_NAME",
+    "description": "Starter Postman collection for the $PROJECT_NAME API. Health holds the built-in endpoints and works immediately; Auth and Resources fill in as endpoints are generated. A collection-level pre-request script injects an Authorization header on every request once auth_token is set in the active environment.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Inject the bearer token when auth_token is set in the active scope",
+          "const token = pm.variables.get('auth_token');",
+          "if (token) {",
+          "  pm.request.headers.upsert({ key: 'Authorization', value: 'Bearer ' + token });",
+          "}"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    { "key": "base_url", "value": "$DEV_BASE_URL", "type": "string" },
+    { "key": "auth_token", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "description": "Built-in service endpoints available immediately after setup.",
+      "item": [
+        {
+          "name": "Health check",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/health",
+            "description": "Returns service status, including database connectivity."
+          },
+          "response": []
+        },
+        {
+          "name": "API root",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/",
+            "description": "Returns the API name and version."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "description": "Authentication endpoints. The Login request stores the returned token in the active environment as auth_token, which the collection pre-request script injects on subsequent requests.",
+      "item": [
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Store the token so the collection pre-request script can inject it",
+                  "if (pm.response.code === 200) {",
+                  "  const body = pm.response.json();",
+                  "  const token = body.token || (body.data && body.data.token);",
+                  "  if (token) {",
+                  "    pm.environment.set('auth_token', token);",
+                  "  }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"change-me\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{base_url}}/auth/login",
+            "description": "Available once auth endpoints are generated (api-authentication skill or /build-from-schema Phase 4)."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Resources",
+      "description": "Generated CRUD endpoints land here. Regenerate this collection from the OpenAPI spec after running /build-from-schema -- see the README for the command.",
+      "item": []
+    }
+  ]
+}
+COLEOF
+
+write_file "$TARGET_DIR/postman/environment.json" << PMENVEOF
+{
+  "name": "$PROJECT_NAME (local)",
+  "values": [
+    {
+      "key": "base_url",
+      "value": "$DEV_BASE_URL",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "auth_token",
+      "value": "",
+      "type": "secret",
+      "enabled": true
+    }
+  ],
+  "_postman_variable_scope": "environment"
+}
+PMENVEOF
+
+success "Postman collection and environment created."
+
+# ---- Project README ----
+step "Generating project README..."
+
+{
+  cat << READMEDYN
+# $PROJECT_NAME
+
+A Nerva API project for the $PLATFORM_LABEL target. Service code lives in [api/](api/), documentation in [docs/](docs/), and a ready-to-import Postman collection in [postman/](postman/).
+
+## Quickstart
+
+\`\`\`bash
+cd api
+$DEV_STEPS
+pnpm test                 # run the test suite
+\`\`\`
+
+The dev server listens at $DEV_BASE_URL -- verify with a GET to /health.
+READMEDYN
+  cat << 'READMESTATIC'
+
+## Postman
+
+`postman/collection.json` is a Postman Collection (v2.1 format) organized into three folders: **Health** (works immediately), **Auth**, and **Resources** (populated as endpoints are generated). `postman/environment.json` is the matching local environment defining `base_url` and `auth_token`.
+
+To import and run:
+
+1. In Postman, click **Import** and drop in `postman/collection.json` and `postman/environment.json`.
+2. Pick the imported environment in the environment selector (top right).
+3. With the dev server running, send **Health > Health check**.
+
+Authenticated requests are handled by the collection-level pre-request script: once `auth_token` has a value, every request gets an `Authorization: Bearer <token>` header. The **Auth > Login** request fills `auth_token` automatically from a successful login response; until auth endpoints exist, paste a token into the environment manually.
+
+### Regenerating the collection from an OpenAPI spec
+
+Once the API has an OpenAPI spec (the Nerva pipeline writes one to `docs/openapi.yaml`), regenerate the collection so it covers every endpoint:
+
+```bash
+npx --yes --package=openapi-to-postmanv2 openapi2postmanv2 \
+  -s docs/openapi.yaml -o postman/collection.json -p \
+  -O folderStrategy=Tags
+```
+
+In a Nerva framework checkout, `./scripts/generate-openapi-docs.sh` runs this conversion automatically after exporting the spec, and additionally re-applies the `base_url`/`auth_token` variables and the auth pre-request script. Re-import the file in Postman to pick up changes; `postman/environment.json` is never overwritten, so your tokens and URLs survive regeneration.
+READMESTATIC
+} | write_file "$TARGET_DIR/README.md"
+
+success "README created."
+
 # ---- .gitignore ----
 write_file "$API_DIR/.gitignore" << 'GEOF'
 node_modules/
@@ -299,5 +502,9 @@ if ! $DRY_RUN; then
     echo "    pnpm dev                  # Start dev server"
   fi
   echo "    pnpm test                 # Run tests"
+  echo ""
+  echo "  Postman:"
+  echo "    Import postman/collection.json and postman/environment.json"
+  echo "    to start testing endpoints immediately."
   echo ""
 fi
