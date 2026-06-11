@@ -102,24 +102,19 @@ todosRoutes.post(
 
 ### Error Handling
 
-Use Hono's `HTTPException` for expected errors and a global error handler for unexpected ones:
+Throw typed errors in handlers and let a single global handler serialize them to the [standard error envelope](./error-handling.md):
 
 ```typescript
-import { HTTPException } from "hono/http-exception";
+import { NotFoundError, errorHandler } from "../middleware/error-handler";
 
 // In route handlers -- throw typed errors
 if (!todo) {
-  throw new HTTPException(404, { message: "Todo not found" });
+  throw new NotFoundError("Todo", id);
 }
 
-// Global error handler in app setup
-app.onError((err, c) => {
-  if (err instanceof HTTPException) {
-    return c.json({ error: err.message }, err.status);
-  }
-  console.error(err);
-  return c.json({ error: "Internal server error" }, 500);
-});
+// Global error handler in app setup -- serializes AppError, ZodError,
+// HTTPException, and unexpected errors to the standard envelope
+app.onError(errorHandler);
 ```
 
 ### Context Typing
@@ -323,15 +318,17 @@ See the [CORS configuration guide](./cors-configuration.md) for environment-spec
 
 ### Consistent Response Format
 
-All error responses follow the same shape:
+All error responses follow the same shape -- a single top-level `error` object:
 
 ```json
 {
-  "error": "Validation failed",
-  "code": "VALIDATION_ERROR",
-  "details": [
-    { "field": "title", "message": "Required" }
-  ]
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Request validation failed",
+    "details": [
+      { "field": "title", "message": "Required" }
+    ]
+  }
 }
 ```
 
@@ -344,8 +341,11 @@ All error responses follow the same shape:
 | `FORBIDDEN` | 403 | Authenticated but insufficient permissions |
 | `NOT_FOUND` | 404 | Resource does not exist |
 | `CONFLICT` | 409 | Duplicate resource or state conflict |
+| `PAYLOAD_TOO_LARGE` | 413 | Request body exceeds the size limit |
 | `RATE_LIMITED` | 429 | Too many requests |
 | `INTERNAL_ERROR` | 500 | Unexpected server error |
+
+See the [error handling guide](./error-handling.md) for the full format definition, error code constants, typed error classes, the global `app.onError()` handler, per-category examples, and how the format maps to RFC 9457 Problem Details.
 
 ## Performance
 
