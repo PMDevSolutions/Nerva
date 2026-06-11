@@ -16,6 +16,9 @@ jobs:
     steps:
       - uses: actions/stale@v10
         with:
+          # The stale and pinned labels must exist in the repo's label set
+          # (gh label create); deleting them breaks filtering and exemptions.
+
           # Issue configuration
           days-before-issue-stale: 60
           days-before-issue-close: 14
@@ -25,12 +28,13 @@ jobs:
             not had any activity in the last 60 days. It will be closed in
             14 days if no further activity occurs. If this issue is still
             relevant, please leave a comment or remove the stale label.
-            Thank you for your contributions!
+            Maintainers can add the pinned label to exempt an issue from
+            being auto-closed. Thank you for your contributions!
           close-issue-message: >
             This issue has been automatically closed due to inactivity.
             If you believe this issue is still relevant, please feel free
             to reopen it with updated context. Thank you!
-          exempt-issue-labels: "priority: high,help wanted"
+          exempt-issue-labels: "priority: high,help wanted,pinned"
 
           # PR configuration
           days-before-pr-stale: 30
@@ -46,3 +50,4 @@ jobs:
             This pull request has been automatically closed due to
             inactivity. If you would like to continue this work, please
             feel free to reopen it or create a new pull request. Thank you!
+          exempt-pr-labels: "pinned"
