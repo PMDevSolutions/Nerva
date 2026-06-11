@@ -1,0 +1,31 @@
+{
+  "projectName": "Nerva",
+  "projectOwner": "PMDevSolutions",
+  "repoType": "github",
+  "repoHost": "https://github.com",
+  "files": [
+    "README.md"
+  ],
+  "imageSize": 100,
+  "commit": false,
+  "commitConvention": "angular",
+  "contributorsPerLine": 7,
+  "linkToUsage": false,
+  "skipCi": false,
+  "contributors": [
+    {
+      "login": "PAMulligan",
+      "name": "PMullz",
+      "avatar_url": "https://avatars.githubusercontent.com/u/13412531?v=4",
+      "profile": "https://pmds.info/",
+      "contributions": [
+        "code",
+        "doc",
+        "test",
+        "infra",
+        "review",
+        "ideas"
+      ]
+    }
+  ]
+}

@@ -7,6 +7,7 @@ A Claude Code-integrated API & backend development framework with TypeScript, Ho
 [![CI](https://github.com/PMDevSolutions/Nerva/actions/workflows/ci.yml/badge.svg)](https://github.com/PMDevSolutions/Nerva/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Patreon](https://img.shields.io/badge/Patreon-Support-orange?logo=patreon)](https://www.patreon.com/PaulMakesThings)
+[![All Contributors](https://img.shields.io/github/all-contributors/PMDevSolutions/Nerva?color=ee8449&style=flat-square)](#contributors)
 
 ---
 
@@ -206,6 +207,28 @@ Nerva is the backend counterpart in a family of Claude Code-integrated developme
 Contributions are welcome! Please read the [Contributing Guide](CONTRIBUTING.md) before submitting a pull request.
 
 This project follows the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.md).
+
+## Contributors
+
+Thanks to these wonderful people ([emoji key](https://allcontributors.org/en/reference/emoji-key/)):
+
+<!-- ALL-CONTRIBUTORS-LIST:START - Do not remove or modify this section -->
+<!-- prettier-ignore-start -->
+<!-- markdownlint-disable -->
+<table>
+  <tbody>
+    <tr>
+      <td align="center" valign="top" width="14.28%"><a href="https://pmds.info/"><img src="https://avatars.githubusercontent.com/u/13412531?v=4?s=100" width="100px;" alt="PMullz"/><br /><sub><b>PMullz</b></sub></a><br /><a href="https://github.com/PMDevSolutions/Nerva/commits?author=PAMulligan" title="Code">💻</a> <a href="https://github.com/PMDevSolutions/Nerva/commits?author=PAMulligan" title="Documentation">📖</a> <a href="https://github.com/PMDevSolutions/Nerva/commits?author=PAMulligan" title="Tests">⚠️</a> <a href="#infra-PAMulligan" title="Infrastructure (Hosting, Build-Tools, etc)">🚇</a> <a href="https://github.com/PMDevSolutions/Nerva/pulls?q=is%3Apr+reviewed-by%3APAMulligan" title="Reviewed Pull Requests">👀</a> <a href="#ideas-PAMulligan" title="Ideas, Planning, & Feedback">🤔</a></td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- markdownlint-restore -->
+<!-- prettier-ignore-end -->
+
+<!-- ALL-CONTRIBUTORS-LIST:END -->
+
+This project follows the [all-contributors](https://allcontributors.org) specification. Contributions of any kind are welcome — see [how contributors are recognized](CONTRIBUTING.md#contributor-recognition).
 
 ## Support the Project
 
