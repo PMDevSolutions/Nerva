@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a **Claude Code-integrated API & backend development framework** providing specialized agents, skills, scripts, and schema-to-API conversion pipelines. Built with TypeScript, Hono (HTTP framework), Drizzle ORM, and PostgreSQL. Deployed to Cloudflare Workers or Node.js.
+This is a **Claude Code-integrated API & backend development framework** providing specialized agents, skills, scripts, and schema-to-API conversion pipelines. Built with TypeScript, Hono (HTTP framework), Drizzle ORM, and PostgreSQL. Deployed to Cloudflare Workers, Node.js, or AWS Lambda.
 
 Nerva is the backend counterpart to **Aurelius** (frontend framework).
 
@@ -12,7 +12,7 @@ The framework is designed for:
 - Schema-first API development (OpenAPI spec to working API)
 - OpenAPI-to-working-API conversion with TDD-mandatory development
 - Comprehensive testing (integration tests, contract tests, load tests with k6)
-- Deployment to Cloudflare Workers or Node.js with Docker support
+- Deployment to Cloudflare Workers, Node.js (Docker), or AWS Lambda (SAM)
 - Full product lifecycle support (engineering, database, testing, DevOps, operations)
 
 ## Project Structure
@@ -38,6 +38,7 @@ project-root/
 │   ├── shared/             # ESLint, Prettier, TypeScript configs
 │   ├── cloudflare-workers/ # Wrangler config
 │   ├── node-server/        # Node.js server config
+│   ├── aws-lambda/         # SAM template, esbuild config, OIDC deploy workflow
 │   └── docker/             # Dockerfile, docker-compose
 ├── docs/
 │   ├── schema-to-api/      # Pipeline guide
@@ -57,7 +58,7 @@ project-root/
 
 ```bash
 # Setup a new API project
-./scripts/setup-project.sh my-api --cloudflare  # or --node
+./scripts/setup-project.sh my-api --cloudflare  # or --node / --lambda
 
 # Run tests with coverage
 ./scripts/run-tests.sh
@@ -232,7 +233,7 @@ Autonomous 10-phase pipeline that converts an OpenAPI specification into a worki
 - **Schema-first** — OpenAPI spec drives database schema, types, handlers, and tests
 - **Contract testing** — generated tests validate API responses against OpenAPI spec
 - **Load testing** — k6 scripts generated for performance-critical endpoints
-- **Multi-target deployment** — Cloudflare Workers, Node.js, Docker with single config change
+- **Multi-target deployment** — Cloudflare Workers, Node.js, Docker, AWS Lambda with single config change
 - **Type safety end-to-end** — Drizzle schema to Zod validators to TypeScript types
 - Quality gate: 80%+ coverage, TypeScript strict, security audit, bundle analysis
 - Resumable: TodoWrite tracks progress across interrupted sessions
@@ -487,9 +488,10 @@ pnpm drizzle-kit studio             # Open database GUI
 ```bash
 ./scripts/setup-project.sh my-api --cloudflare  # New Cloudflare Workers project
 ./scripts/setup-project.sh my-api --node         # New Node.js project
+./scripts/setup-project.sh my-api --lambda       # New AWS Lambda (SAM) project
 ```
 
 ---
 
-**Last Updated:** 2026-03-29
+**Last Updated:** 2026-06-11
 **Architecture:** 24 agents, 12 skills, 4 plugins + gh CLI, 9 scripts

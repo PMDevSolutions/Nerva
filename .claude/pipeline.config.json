@@ -68,7 +68,7 @@
     "noAnyTypes": true
   },
   "deployment": {
-    "targets": ["cloudflare-workers", "node-docker"],
+    "targets": ["cloudflare-workers", "node-docker", "aws-lambda"],
     "defaultTarget": "cloudflare-workers",
     "cloudflareWorkers": {
       "compatibilityDate": "2024-12-01",
@@ -85,6 +85,16 @@
       "healthCheckPath": "/health",
       "processManager": "node",
       "multiStage": true
+    },
+    "awsLambda": {
+      "runtime": "nodejs22.x",
+      "architecture": "arm64",
+      "memorySizeMb": 512,
+      "timeoutSeconds": 28,
+      "apiGatewayType": "http-api",
+      "bundler": "esbuild",
+      "framework": "sam",
+      "provisionedConcurrency": 0
     },
     "cicd": {
       "provider": "github-actions",

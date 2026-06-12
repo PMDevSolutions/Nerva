@@ -3,10 +3,13 @@ name: deployment-config-generator
 description: >
   Generates deployment configuration based on the target platform specified in
   build-spec.json. For Cloudflare Workers, generates wrangler.toml with bindings.
-  For Node.js, generates Dockerfile and docker-compose.yml with PostgreSQL. Always
-  generates GitHub Actions CI/CD workflow and .env.example. Keywords: deploy,
-  deployment, wrangler, cloudflare, workers, docker, dockerfile, docker-compose,
-  github-actions, ci-cd, pipeline, env, configuration, infrastructure
+  For Node.js, generates Dockerfile and docker-compose.yml with PostgreSQL. For
+  AWS Lambda, generates a SAM template (API Gateway HTTP API), esbuild bundling
+  config, and an OIDC deploy workflow. Always generates GitHub Actions CI/CD
+  workflow and .env.example. Keywords: deploy, deployment, wrangler, cloudflare,
+  workers, docker, dockerfile, docker-compose, aws, lambda, sam, api-gateway,
+  serverless, esbuild, oidc, cold-start, github-actions, ci-cd, pipeline, env,
+  configuration, infrastructure
 ---
 
 # Deployment Config Generator (Phase 5)
@@ -42,7 +45,7 @@ const spec = JSON.parse(
   await readFile('.claude/plans/build-spec.json', 'utf-8'),
 );
 
-const target = spec.deployment.target; // 'cloudflare-workers' | 'node'
+const target = spec.deployment.target; // 'cloudflare-workers' | 'node' | 'aws-lambda'
 const authStrategy = spec.auth.strategy;
 ```
 
@@ -245,6 +248,105 @@ serve({
 });
 ```
 
+### Step 2c -- AWS Lambda Configuration
+
+If target is `aws-lambda`, generate a SAM template, esbuild bundling config, and
+the Lambda entry point. Canonical templates live in `templates/aws-lambda/`
+(`template.yaml`, `samconfig.toml`, `esbuild.config.mjs`, `deploy.yml`,
+`docker-compose.yml` for the local dev database).
+
+The Lambda entry point uses Hono's AWS Lambda adapter. The adapter ships inside
+the core `hono` package (`hono/aws-lambda`) -- there is no separate package to
+install:
+
+```typescript
+// api/src/lambda.ts
+import { handle } from 'hono/aws-lambda';
+import app from './index.js';
+
+export const handler = handle(app);
+```
+
+Key pieces of `api/template.yaml`:
+
+```yaml
+Globals:
+  Function:
+    Runtime: nodejs22.x
+    Architectures: [arm64]   # Graviton: cheaper, faster cold starts
+    MemorySize: 512          # CPU scales with memory; right-size with Power Tuning
+    Timeout: 28              # below API Gateway's hard 30s integration timeout
+
+Resources:
+  HttpApi:
+    Type: AWS::Serverless::HttpApi   # HTTP API (v2), NOT REST API
+    Properties:
+      StageName: $default
+
+  ApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: dist/                 # prebuilt esbuild bundle
+      Handler: lambda.handler
+      Events:
+        Root:
+          Type: HttpApi              # no Path/Method = $default catch-all;
+          Properties:                # Hono does the routing
+            ApiId: !Ref HttpApi
+```
+
+Bundling: `esbuild.config.mjs` produces a single minified `dist/lambda.mjs`
+(`pnpm build:lambda`). `sam deploy` zips and uploads `dist/` directly -- do not
+use `sam build` (its esbuild builder runs npm and conflicts with pnpm).
+
+Add the build/deploy scripts to package.json:
+
+```json
+{
+  "scripts": {
+    "build:lambda": "node esbuild.config.mjs",
+    "deploy": "pnpm run build:lambda && sam deploy"
+  }
+}
+```
+
+(Invoke as `pnpm run deploy` -- bare `pnpm deploy` is a pnpm built-in.)
+
+Cold start notes to include in the generated README:
+
+- Single-file esbuild bundle: no node_modules to unzip/resolve at init
+- arm64 + memory sizing (CPU scales with memory; benchmark with AWS Lambda
+  Power Tuning before raising the 512 MB floor)
+- Reuse module-scope DB connections across warm invocations; cap the pool at
+  `max: 1` per instance and point DATABASE_URL at RDS Proxy or a serverless
+  driver so Lambda concurrency cannot exhaust Postgres connections
+- Provisioned concurrency for latency-critical routes (SnapStart is not
+  available for Node.js runtimes)
+- Container-image alternative: AWS Lambda Web Adapter runs the Node.js server
+  build unchanged (useful past the 250 MB zip limit; slower cold starts)
+
+Deployment uses GitHub OIDC (no long-lived AWS keys). Generate
+`.github/workflows/deploy.yml` from `templates/aws-lambda/deploy.yml`:
+
+```yaml
+permissions:
+  id-token: write # required for OIDC federation
+  contents: read
+
+# ...
+
+- uses: aws-actions/setup-sam@v2
+  with:
+    use-installer: true
+- uses: aws-actions/configure-aws-credentials@v4
+  with:
+    role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+    aws-region: ${{ vars.AWS_REGION }}
+- run: >-
+    sam deploy --no-confirm-changeset --no-fail-on-empty-changeset
+    --parameter-overrides "DatabaseUrl=${{ secrets.DATABASE_URL }} JwtSecret=${{ secrets.JWT_SECRET }}"
+```
+
 ### Step 3 -- Generate GitHub Actions CI/CD
 
 ```yaml
@@ -339,6 +441,14 @@ jobs:
       # For Node.js / Docker:
       # - run: docker build -t myapi:${{ github.sha }} ./api
       # - run: docker push myapi:${{ github.sha }}
+      # For AWS Lambda (OIDC -- job also needs `permissions: id-token: write`,
+      # see Step 2c):
+      # - uses: aws-actions/setup-sam@v2
+      # - uses: aws-actions/configure-aws-credentials@v4
+      #   with:
+      #     role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+      #     aws-region: ${{ vars.AWS_REGION }}
+      # - run: cd api && pnpm run build:lambda && sam deploy --no-confirm-changeset
 
   deploy-production:
     runs-on: ubuntu-latest
@@ -412,9 +522,13 @@ Ensure the API package.json has all necessary scripts:
 | Wrangler config | `api/wrangler.toml` | Cloudflare Workers deployment |
 | Dockerfile | `api/Dockerfile` | Node.js container build |
 | Docker Compose | `docker-compose.yml` | Full stack local/prod setup |
+| SAM template | `api/template.yaml` | AWS Lambda + API Gateway HTTP API stack |
+| SAM config | `api/samconfig.toml` | Stack name, region, deploy defaults |
+| esbuild config | `api/esbuild.config.mjs` | Single-file Lambda bundle build |
 | CI/CD workflow | `.github/workflows/ci.yml` | GitHub Actions pipeline |
+| Deploy workflow | `.github/workflows/deploy.yml` | OIDC-based AWS Lambda deploy (Lambda target) |
 | Env template | `.env.example` | Environment variable template |
-| Entry point | `api/src/index.ts` | Platform-specific server bootstrap |
+| Entry point | `api/src/index.ts` | Platform-specific server bootstrap (plus `api/src/lambda.ts` on Lambda) |
 
 ## Integration
 

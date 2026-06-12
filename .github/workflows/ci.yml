@@ -166,7 +166,7 @@ jobs:
             fi
           done
 
-          for dir in templates/shared templates/cloudflare-workers templates/node-server templates/docker; do
+          for dir in templates/shared templates/cloudflare-workers templates/node-server templates/docker templates/aws-lambda; do
             if [ -d "$dir" ]; then
               echo "  $dir: OK"
             else
@@ -224,6 +224,10 @@ jobs:
 
       - name: Type-check Node snippets
         run: pnpm exec tsc --noEmit -p tsconfig.node.json
+        working-directory: templates/snippets
+
+      - name: Type-check AWS Lambda snippets
+        run: pnpm exec tsc --noEmit -p tsconfig.lambda.json
         working-directory: templates/snippets
 
   check-links:

@@ -89,7 +89,7 @@ Integration testing, contract testing, load testing for APIs.
 
 ### devops-automator (blue)
 Docker, CI/CD pipeline generation, deployment automation.
-- **When to use:** Setting up Docker, creating CI/CD, deploying to Cloudflare Workers or Node.js
+- **When to use:** Setting up Docker, creating CI/CD, deploying to Cloudflare Workers, Node.js, or AWS Lambda
 - **Key capabilities:** Multi-stage Docker, GitHub Actions, wrangler deploy, PM2, health endpoints
 
 ---

@@ -32,7 +32,7 @@ If you have an OpenAPI specification file:
 
 ```bash
 # Initialize the project structure
-./scripts/setup-project.sh my-api --cloudflare   # or --node
+./scripts/setup-project.sh my-api --cloudflare   # or --node / --lambda
 
 # Open Claude Code and run the pipeline
 /build-from-schema path/to/openapi-spec.yaml
