@@ -17,7 +17,7 @@ A Claude Code-integrated API & backend development framework with TypeScript, Ho
 - **12 Development Skills** — Automated workflows for schema parsing, TDD, route generation, authentication, validation, documentation
 - **10-Phase Schema-to-API Pipeline** — Convert OpenAPI specs into fully working, tested API servers with a single command
 - **TDD-Mandatory Development** — Integration tests written before route handlers, hard gate enforced
-- **Three Deployment Targets** — Cloudflare Workers (edge), Node.js (Docker), or AWS Lambda (SAM) with one config change
+- **Four Deployment Targets** — Cloudflare Workers (edge), Node.js (Docker), AWS Lambda (SAM), or Railway (PaaS) with one config change
 - **Testing Stack** — Vitest, supertest, contract tests against OpenAPI, k6 load tests
 - **Schema-First Design** — Database schemas, types, and validators all derived from your API spec
 
@@ -37,7 +37,7 @@ cd Nerva
 pnpm install
 
 # Initialize a new API project
-./scripts/setup-project.sh my-api --cloudflare   # or --node / --lambda
+./scripts/setup-project.sh my-api --cloudflare   # or --node / --lambda / --railway
 
 # Start development
 cd api && pnpm dev
@@ -176,6 +176,7 @@ Full catalog: [`.claude/CUSTOM-AGENTS-GUIDE.md`](.claude/CUSTOM-AGENTS-GUIDE.md)
 | `templates/cloudflare-workers/` | Wrangler config with Hyperdrive |
 | `templates/node-server/` | Dockerfile + docker-compose with PostgreSQL |
 | `templates/aws-lambda/` | SAM template, esbuild config, OIDC deploy workflow |
+| `templates/railway/` | Railway config-as-code + Nixpacks build config |
 | `templates/docker/` | Extended Docker with Redis + pgAdmin |
 
 ## Part of the PMDS Framework Series

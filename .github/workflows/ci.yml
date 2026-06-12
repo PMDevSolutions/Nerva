@@ -166,7 +166,7 @@ jobs:
             fi
           done
 
-          for dir in templates/shared templates/cloudflare-workers templates/node-server templates/docker templates/aws-lambda; do
+          for dir in templates/shared templates/cloudflare-workers templates/node-server templates/docker templates/aws-lambda templates/railway; do
             if [ -d "$dir" ]; then
               echo "  $dir: OK"
             else

@@ -3,7 +3,7 @@ set -euo pipefail
 
 # ============================================================================
 # setup-project.sh - Initialize a new Nerva API project
-# Usage: ./scripts/setup-project.sh <project-name> [--cloudflare|--node|--lambda] [--dry-run]
+# Usage: ./scripts/setup-project.sh <project-name> [--cloudflare|--node|--lambda|--railway] [--dry-run]
 # ============================================================================
 
 RED='\033[0;31m'
@@ -26,10 +26,11 @@ TEMPLATES_DIR="$PROJECT_ROOT/templates"
 
 if [[ $# -lt 1 ]]; then
   error "Missing project name."
-  echo "Usage: $0 <project-name> [--cloudflare|--node|--lambda] [--dry-run]"
+  echo "Usage: $0 <project-name> [--cloudflare|--node|--lambda|--railway] [--dry-run]"
   echo "  --cloudflare   Set up for Cloudflare Workers deployment"
   echo "  --node         Set up for Node.js / Docker deployment (default)"
   echo "  --lambda       Set up for AWS Lambda deployment (SAM + API Gateway HTTP API)"
+  echo "  --railway      Set up for Railway deployment (Docker build + managed PostgreSQL)"
   echo "  --dry-run      Preview what would be created without making changes"
   exit 1
 fi
@@ -44,6 +45,7 @@ while [[ $# -gt 0 ]]; do
     --cloudflare) PLATFORM="cloudflare"; shift ;;
     --node)       PLATFORM="node"; shift ;;
     --lambda)     PLATFORM="lambda"; shift ;;
+    --railway)    PLATFORM="railway"; shift ;;
     --dry-run)    DRY_RUN=true; shift ;;
     *)            error "Unknown option: $1"; exit 1 ;;
   esac
@@ -293,6 +295,36 @@ LENVEOF
   fi
 
   success "AWS Lambda configured. Edit samconfig.toml with your stack name and region."
+elif [[ "$PLATFORM" == "railway" ]]; then
+  step "Setting up Railway..."
+  # Railway builds the same multi-stage image as the Node.js target
+  copy_file "$TEMPLATES_DIR/node-server/Dockerfile" "$API_DIR/Dockerfile"
+  copy_file "$TEMPLATES_DIR/node-server/docker-compose.yml" "$API_DIR/docker-compose.yml"
+  copy_file "$TEMPLATES_DIR/railway/railway.toml" "$API_DIR/railway.toml"
+  copy_file "$TEMPLATES_DIR/railway/nixpacks.toml" "$API_DIR/nixpacks.toml"
+
+  write_file "$API_DIR/.env.example" << 'RENVEOF'
+# Local development values. On Railway, set variables on the service
+# (Variables tab) instead. Wire the managed PostgreSQL with a reference
+# variable:
+#   DATABASE_URL=${{Postgres.DATABASE_URL}}
+# Railway injects PORT automatically; the server binds it at startup.
+NODE_ENV=development
+PORT=3000
+DATABASE_URL=postgresql://nerva:nerva_secret@localhost:5432/nerva_db
+LOG_LEVEL=debug
+APP_VERSION=0.0.1
+HEALTH_DB_TIMEOUT_MS=2000
+# Required in production (min 32 chars). Generate with: openssl rand -hex 32
+JWT_SECRET=dev-secret-change-me-in-production-min-32-chars
+RENVEOF
+
+  if ! command -v railway &>/dev/null; then
+    warn "Railway CLI not found. Optional -- GitHub auto-deploy works without it:"
+    warn "  https://docs.railway.com/guides/cli"
+  fi
+
+  success "Railway configured. Connect the repo in Railway and set Root Directory to 'api'."
 else
   step "Setting up Node.js / Docker..."
   copy_file "$TEMPLATES_DIR/node-server/Dockerfile" "$API_DIR/Dockerfile"
@@ -322,6 +354,10 @@ if [[ "$PLATFORM" == "cloudflare" ]]; then
 elif [[ "$PLATFORM" == "lambda" ]]; then
   DEV_BASE_URL="http://localhost:3000"
   PLATFORM_LABEL="AWS Lambda"
+  DEV_STEPS=$'docker compose up -d      # start PostgreSQL\npnpm dev                  # start the dev server'
+elif [[ "$PLATFORM" == "railway" ]]; then
+  DEV_BASE_URL="http://localhost:3000"
+  PLATFORM_LABEL="Railway"
   DEV_STEPS=$'docker compose up -d      # start PostgreSQL\npnpm dev                  # start the dev server'
 else
   DEV_BASE_URL="http://localhost:3000"
@@ -551,6 +587,57 @@ which proxies Lambda events to the HTTP port the server listens on. Useful for
 container-only dependencies or bundles beyond the 250 MB zip limit; the
 trade-off is slower cold starts than the zip deployment this project uses.
 READMELAMBDA
+  elif [[ "$PLATFORM" == "railway" ]]; then
+    cat << 'READMERAILWAY'
+
+## Deploying to Railway
+
+The API deploys to [Railway](https://railway.com) as a Docker service: Railway
+builds `api/Dockerfile` (the same hardened multi-stage image as the Node.js
+target), and `api/railway.toml` configures the build, health check, start
+command, and restart policy -- so what deploys is exactly what
+`docker compose up` runs locally.
+
+### One-time setup
+
+1. Create a project with a database: in the [dashboard](https://railway.com/new)
+   choose **Deploy PostgreSQL**, then **New -> GitHub Repo** to add the API
+   service from this repository. (CLI: `railway init`, then
+   `railway add --database postgres`.)
+2. Point the service at the API: **Settings -> Source -> Root Directory** =
+   `api`, so Railway picks up `railway.toml` and the `Dockerfile`.
+3. Set service variables (**Variables** tab). `${{Postgres.DATABASE_URL}}` is
+   a Railway reference variable that resolves to the managed database:
+
+   | Variable | Value |
+   |----------|-------|
+   | `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` |
+   | `JWT_SECRET` | output of `openssl rand -hex 32` |
+   | `NODE_ENV` | `production` |
+   | `LOG_LEVEL` | `info` |
+
+   Railway injects `PORT` automatically; the server binds it at startup.
+
+### Deploys
+
+Railway auto-deploys every push to the connected branch. Each deploy must
+answer on `/health` (`healthcheckPath` in `railway.toml`) before traffic
+switches over; a failing check keeps the previous deployment live. To deploy
+from the CLI instead, run `railway up` from `api/`.
+
+Run database migrations against the Railway database from your machine:
+
+```bash
+railway run pnpm db:migrate
+```
+
+### Nixpacks alternative
+
+To build without the Dockerfile, set `builder = "NIXPACKS"` in
+`api/railway.toml`; `api/nixpacks.toml` pins pnpm + Node 22 and the
+build/start commands. The Dockerfile build stays the default because it ships
+the exact image you can test locally.
+READMERAILWAY
   fi
   cat << 'READMESTATIC'
 
@@ -621,6 +708,11 @@ if ! $DRY_RUN; then
     echo "    pnpm dev                  # Start dev server"
     echo "    pnpm build:lambda         # Bundle for Lambda"
     echo "    sam deploy --guided       # First AWS deploy"
+  elif [[ "$PLATFORM" == "railway" ]]; then
+    echo "    docker compose up -d      # Start PostgreSQL"
+    echo "    pnpm dev                  # Start dev server"
+    echo "    railway init              # Create Railway project (or connect GitHub)"
+    echo "    railway up                # Deploy from the CLI"
   else
     echo "    docker compose up -d      # Start PostgreSQL"
     echo "    pnpm dev                  # Start dev server"

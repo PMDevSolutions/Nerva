@@ -5,11 +5,13 @@ description: >
   build-spec.json. For Cloudflare Workers, generates wrangler.toml with bindings.
   For Node.js, generates Dockerfile and docker-compose.yml with PostgreSQL. For
   AWS Lambda, generates a SAM template (API Gateway HTTP API), esbuild bundling
-  config, and an OIDC deploy workflow. Always generates GitHub Actions CI/CD
-  workflow and .env.example. Keywords: deploy, deployment, wrangler, cloudflare,
-  workers, docker, dockerfile, docker-compose, aws, lambda, sam, api-gateway,
-  serverless, esbuild, oidc, cold-start, github-actions, ci-cd, pipeline, env,
-  configuration, infrastructure
+  config, and an OIDC deploy workflow. For Railway, generates railway.toml
+  (Dockerfile build, health check, start command) and nixpacks.toml. Always
+  generates GitHub Actions CI/CD workflow and .env.example. Keywords: deploy,
+  deployment, wrangler, cloudflare, workers, docker, dockerfile, docker-compose,
+  aws, lambda, sam, api-gateway, serverless, esbuild, oidc, cold-start, railway,
+  nixpacks, paas, github-actions, ci-cd, pipeline, env, configuration,
+  infrastructure
 ---
 
 # Deployment Config Generator (Phase 5)
@@ -45,7 +47,7 @@ const spec = JSON.parse(
   await readFile('.claude/plans/build-spec.json', 'utf-8'),
 );
 
-const target = spec.deployment.target; // 'cloudflare-workers' | 'node' | 'aws-lambda'
+const target = spec.deployment.target; // 'cloudflare-workers' | 'node' | 'aws-lambda' | 'railway'
 const authStrategy = spec.auth.strategy;
 ```
 
@@ -347,6 +349,67 @@ permissions:
     --parameter-overrides "DatabaseUrl=${{ secrets.DATABASE_URL }} JwtSecret=${{ secrets.JWT_SECRET }}"
 ```
 
+### Step 2d -- Railway Configuration
+
+If target is `railway`, reuse the Node.js Dockerfile from Step 2b and generate
+Railway config-as-code. Canonical templates live in `templates/railway/`
+(`railway.toml`, `nixpacks.toml`). Railway builds the service from the
+Dockerfile, so the deployed image is identical to the local
+`docker compose up` image.
+
+```toml
+# api/railway.toml
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+watchPatterns = ["src/**", "package.json", "pnpm-lock.yaml", "Dockerfile"]
+
+[deploy]
+startCommand = "node dist/index.js"
+healthcheckPath = "/health"
+healthcheckTimeout = 300
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
+numReplicas = 1
+```
+
+No deploy workflow is generated: Railway auto-deploys the connected GitHub
+repo on every push, gated by the `/health` check. (CLI deploys from CI are
+possible with `railway up` and a `RAILWAY_TOKEN` secret, but not required.)
+
+Environment variables live on the Railway service (Variables tab), not in
+config files. Generate this reference table into the project README:
+
+| Variable | Value |
+|---|---|
+| `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` (reference to managed PostgreSQL) |
+| `JWT_SECRET` | generated secret, 32+ chars |
+| `NODE_ENV` | `production` |
+| `LOG_LEVEL` | `info` |
+
+`PORT` is injected by Railway; the Node.js entry point already binds it.
+Remind the user of the one dashboard setting config-as-code cannot express:
+service **Root Directory** must be `api` so Railway finds `railway.toml` and
+the Dockerfile.
+
+Nixpacks alternative (`builder = "NIXPACKS"`) for building without the
+Dockerfile -- `nixpacks.toml` pins the toolchain:
+
+```toml
+# api/nixpacks.toml
+[phases.setup]
+nixPkgs = ["nodejs_22", "pnpm"]
+
+[phases.install]
+cmds = ["pnpm install --frozen-lockfile"]
+
+[phases.build]
+cmds = ["pnpm build"]
+
+[start]
+cmd = "node dist/index.js"
+```
+
 ### Step 3 -- Generate GitHub Actions CI/CD
 
 ```yaml
@@ -449,6 +512,8 @@ jobs:
       #     role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
       #     aws-region: ${{ vars.AWS_REGION }}
       # - run: cd api && pnpm run build:lambda && sam deploy --no-confirm-changeset
+      # For Railway: no deploy step -- Railway auto-deploys the connected
+      # GitHub repo on push, gated by the /health check (see Step 2d).
 
   deploy-production:
     runs-on: ubuntu-latest
@@ -525,6 +590,8 @@ Ensure the API package.json has all necessary scripts:
 | SAM template | `api/template.yaml` | AWS Lambda + API Gateway HTTP API stack |
 | SAM config | `api/samconfig.toml` | Stack name, region, deploy defaults |
 | esbuild config | `api/esbuild.config.mjs` | Single-file Lambda bundle build |
+| Railway config | `api/railway.toml` | Build, health check, start command, restart policy |
+| Nixpacks config | `api/nixpacks.toml` | Toolchain pins for the non-Docker Railway build |
 | CI/CD workflow | `.github/workflows/ci.yml` | GitHub Actions pipeline |
 | Deploy workflow | `.github/workflows/deploy.yml` | OIDC-based AWS Lambda deploy (Lambda target) |
 | Env template | `.env.example` | Environment variable template |

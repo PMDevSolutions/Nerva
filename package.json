@@ -29,7 +29,8 @@
     "schema-first",
     "tdd",
     "cloudflare-workers",
-    "aws-lambda"
+    "aws-lambda",
+    "railway"
   ],
   "author": "PAMulligan",
   "license": "MIT",
