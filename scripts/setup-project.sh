@@ -3,7 +3,7 @@ set -euo pipefail
 
 # ============================================================================
 # setup-project.sh - Initialize a new Nerva API project
-# Usage: ./scripts/setup-project.sh <project-name> [--cloudflare|--node] [--dry-run]
+# Usage: ./scripts/setup-project.sh <project-name> [--cloudflare|--node|--lambda] [--dry-run]
 # ============================================================================
 
 RED='\033[0;31m'
@@ -26,9 +26,10 @@ TEMPLATES_DIR="$PROJECT_ROOT/templates"
 
 if [[ $# -lt 1 ]]; then
   error "Missing project name."
-  echo "Usage: $0 <project-name> [--cloudflare|--node] [--dry-run]"
+  echo "Usage: $0 <project-name> [--cloudflare|--node|--lambda] [--dry-run]"
   echo "  --cloudflare   Set up for Cloudflare Workers deployment"
   echo "  --node         Set up for Node.js / Docker deployment (default)"
+  echo "  --lambda       Set up for AWS Lambda deployment (SAM + API Gateway HTTP API)"
   echo "  --dry-run      Preview what would be created without making changes"
   exit 1
 fi
@@ -42,6 +43,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --cloudflare) PLATFORM="cloudflare"; shift ;;
     --node)       PLATFORM="node"; shift ;;
+    --lambda)     PLATFORM="lambda"; shift ;;
     --dry-run)    DRY_RUN=true; shift ;;
     *)            error "Unknown option: $1"; exit 1 ;;
   esac
@@ -129,14 +131,21 @@ if ! $DRY_RUN; then
   cd "$API_DIR"
 fi
 
+DEV_ENTRY="src/index.ts"
+LAMBDA_SCRIPTS=""
+if [[ "$PLATFORM" == "lambda" ]]; then
+  DEV_ENTRY="src/dev.ts"
+  LAMBDA_SCRIPTS=$'\n    "build:lambda": "node esbuild.config.mjs",\n    "deploy": "pnpm run build:lambda && sam deploy",'
+fi
+
 write_file "$API_DIR/package.json" << PKGJSON
 {
   "name": "$PROJECT_NAME",
   "version": "0.0.1",
   "private": true,
   "type": "module",
-  "scripts": {
-    "dev": "tsx watch src/index.ts",
+  "scripts": {$LAMBDA_SCRIPTS
+    "dev": "tsx watch $DEV_ENTRY",
     "build": "tsc",
     "start": "node dist/index.js",
     "test": "vitest run",
@@ -174,6 +183,13 @@ step "Creating initial source files..."
 if [[ "$PLATFORM" == "cloudflare" ]]; then
   copy_file "$TEMPLATES_DIR/snippets/cloudflare/src/index.ts" "$API_DIR/src/index.ts"
   copy_file "$TEMPLATES_DIR/snippets/cloudflare/src/config.ts" "$API_DIR/src/config.ts"
+elif [[ "$PLATFORM" == "lambda" ]]; then
+  copy_file "$TEMPLATES_DIR/snippets/aws-lambda/src/index.ts" "$API_DIR/src/index.ts"
+  copy_file "$TEMPLATES_DIR/snippets/aws-lambda/src/lambda.ts" "$API_DIR/src/lambda.ts"
+  copy_file "$TEMPLATES_DIR/snippets/aws-lambda/src/dev.ts" "$API_DIR/src/dev.ts"
+  copy_file "$TEMPLATES_DIR/snippets/aws-lambda/src/config.ts" "$API_DIR/src/config.ts"
+  # Local dev server only; production traffic goes through src/lambda.ts
+  run_cmd pnpm add @hono/node-server
 else
   copy_file "$TEMPLATES_DIR/snippets/node/src/index.ts" "$API_DIR/src/index.ts"
   copy_file "$TEMPLATES_DIR/snippets/node/src/config.ts" "$API_DIR/src/config.ts"
@@ -203,6 +219,9 @@ copy_file "$TEMPLATES_DIR/snippets/shared/src/db/seed.ts" "$API_DIR/src/db/seed.
 if [[ "$PLATFORM" == "cloudflare" ]]; then
   copy_file "$TEMPLATES_DIR/snippets/cloudflare/src/db/ping.ts" "$API_DIR/src/db/ping.ts"
   copy_file "$TEMPLATES_DIR/snippets/cloudflare/src/routes/health.ts" "$API_DIR/src/routes/health.ts"
+elif [[ "$PLATFORM" == "lambda" ]]; then
+  copy_file "$TEMPLATES_DIR/snippets/aws-lambda/src/db/ping.ts" "$API_DIR/src/db/ping.ts"
+  copy_file "$TEMPLATES_DIR/snippets/aws-lambda/src/routes/health.ts" "$API_DIR/src/routes/health.ts"
 else
   copy_file "$TEMPLATES_DIR/snippets/node/src/db/ping.ts" "$API_DIR/src/db/ping.ts"
   copy_file "$TEMPLATES_DIR/snippets/node/src/routes/health.ts" "$API_DIR/src/routes/health.ts"
@@ -213,6 +232,8 @@ copy_file "$TEMPLATES_DIR/snippets/shared/tests/soft-delete.test.ts" "$API_DIR/t
 
 if [[ "$PLATFORM" == "cloudflare" ]]; then
   copy_file "$TEMPLATES_DIR/snippets/cloudflare/tests/unit/health.test.ts" "$API_DIR/tests/unit/health.test.ts"
+elif [[ "$PLATFORM" == "lambda" ]]; then
+  copy_file "$TEMPLATES_DIR/snippets/aws-lambda/tests/unit/health.test.ts" "$API_DIR/tests/unit/health.test.ts"
 else
   copy_file "$TEMPLATES_DIR/snippets/node/tests/unit/health.test.ts" "$API_DIR/tests/unit/health.test.ts"
 fi
@@ -242,6 +263,36 @@ JWT_SECRET=replace-me-with-a-secure-32+-character-secret
 DVEOF
 
   success "Cloudflare Workers configured. Edit wrangler.toml with your resource IDs."
+elif [[ "$PLATFORM" == "lambda" ]]; then
+  step "Setting up AWS Lambda (SAM)..."
+  run_cmd pnpm add -D esbuild
+  copy_file "$TEMPLATES_DIR/aws-lambda/template.yaml"      "$API_DIR/template.yaml"
+  copy_file "$TEMPLATES_DIR/aws-lambda/samconfig.toml"     "$API_DIR/samconfig.toml"
+  copy_file "$TEMPLATES_DIR/aws-lambda/esbuild.config.mjs" "$API_DIR/esbuild.config.mjs"
+  copy_file "$TEMPLATES_DIR/aws-lambda/docker-compose.yml" "$API_DIR/docker-compose.yml"
+
+  make_dirs "$TARGET_DIR/.github/workflows"
+  copy_file "$TEMPLATES_DIR/aws-lambda/deploy.yml" "$TARGET_DIR/.github/workflows/deploy.yml"
+
+  write_file "$API_DIR/.env.example" << 'LENVEOF'
+# Local development only -- deployed functions get their environment from
+# template.yaml parameters (sam deploy --parameter-overrides).
+NODE_ENV=development
+PORT=3000
+DATABASE_URL=postgresql://nerva:nerva_secret@localhost:5432/nerva_db
+LOG_LEVEL=debug
+APP_VERSION=0.0.1
+HEALTH_DB_TIMEOUT_MS=2000
+# Required in production (min 32 chars). Generate with: openssl rand -hex 32
+JWT_SECRET=dev-secret-change-me-in-production-min-32-chars
+LENVEOF
+
+  if ! command -v sam &>/dev/null; then
+    warn "AWS SAM CLI not found. Install it before deploying:"
+    warn "  https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/install-sam-cli.html"
+  fi
+
+  success "AWS Lambda configured. Edit samconfig.toml with your stack name and region."
 else
   step "Setting up Node.js / Docker..."
   copy_file "$TEMPLATES_DIR/node-server/Dockerfile" "$API_DIR/Dockerfile"
@@ -268,6 +319,10 @@ if [[ "$PLATFORM" == "cloudflare" ]]; then
   DEV_BASE_URL="http://localhost:8787"
   PLATFORM_LABEL="Cloudflare Workers"
   DEV_STEPS=$'npx wrangler dev          # start the local dev server'
+elif [[ "$PLATFORM" == "lambda" ]]; then
+  DEV_BASE_URL="http://localhost:3000"
+  PLATFORM_LABEL="AWS Lambda"
+  DEV_STEPS=$'docker compose up -d      # start PostgreSQL\npnpm dev                  # start the dev server'
 else
   DEV_BASE_URL="http://localhost:3000"
   PLATFORM_LABEL="Node.js / Docker"
@@ -434,6 +489,69 @@ pnpm test                 # run the test suite
 
 The dev server listens at $DEV_BASE_URL -- verify with a GET to /health.
 READMEDYN
+  if [[ "$PLATFORM" == "lambda" ]]; then
+    cat << 'READMELAMBDA'
+
+## Deploying to AWS Lambda
+
+The API deploys as a single Lambda function behind an API Gateway **HTTP API**
+(payload format 2.0), defined in `api/template.yaml` (AWS SAM). Hono's
+`aws-lambda` adapter (`api/src/lambda.ts`) translates Lambda events into
+standard Requests, so the same app code runs locally, in tests, and on Lambda.
+
+```bash
+cd api
+pnpm build:lambda           # bundle src/lambda.ts -> dist/lambda.mjs (esbuild)
+sam deploy --guided         # first deploy: interactive, updates samconfig.toml
+pnpm run deploy             # subsequent deploys: build + sam deploy
+```
+
+Secrets are `NoEcho` CloudFormation parameters -- pass them at deploy time
+instead of committing them:
+
+```bash
+sam deploy --parameter-overrides "DatabaseUrl=$DATABASE_URL JwtSecret=$JWT_SECRET"
+```
+
+CI/CD: `.github/workflows/deploy.yml` deploys on every push to `main` using
+GitHub OIDC (no long-lived AWS keys). The one-time IAM setup is documented in
+comments at the top of that file.
+
+### Cold start optimization
+
+The defaults in `api/template.yaml` are chosen with cold starts in mind:
+
+- **Single-file bundle.** esbuild emits one minified `lambda.mjs`, so there is
+  no `node_modules` tree to unzip and resolve during init. Keep it that way:
+  prefer small dependencies and let tree-shaking work.
+- **arm64 (Graviton).** Cheaper per millisecond and generally faster cold
+  starts than x86_64.
+- **Memory = CPU.** Lambda allocates CPU proportionally to memory; 512 MB is
+  the configured floor. If p99 latency matters, benchmark 1024-1769 MB with
+  [AWS Lambda Power Tuning](https://github.com/alexcasalboni/aws-lambda-power-tuning) --
+  more memory often costs *less* overall because invocations finish sooner.
+- **Reuse connections across invocations.** Anything created at module scope
+  survives warm invocations. Keep the Postgres pool small (`max: 1` per
+  instance) and point `DatabaseUrl` at **RDS Proxy** (or a serverless driver
+  such as Neon) so concurrent Lambda instances cannot exhaust database
+  connections.
+- **Provisioned concurrency** is the lever for latency-critical endpoints --
+  `template.yaml` ships a commented block. SnapStart is not available for
+  Node.js runtimes.
+- **Avoid heavy top-level work.** Defer rarely used SDK clients and remote
+  config fetches until first use; top-level code runs inside the billed init
+  phase.
+
+### Container-based alternative (Lambda Web Adapter)
+
+To run the Node.js *server* build on Lambda without code changes, package it
+as a container image with the
+[AWS Lambda Web Adapter](https://github.com/awslabs/aws-lambda-web-adapter),
+which proxies Lambda events to the HTTP port the server listens on. Useful for
+container-only dependencies or bundles beyond the 250 MB zip limit; the
+trade-off is slower cold starts than the zip deployment this project uses.
+READMELAMBDA
+  fi
   cat << 'READMESTATIC'
 
 ## Postman
@@ -474,6 +592,7 @@ dist/
 *.log
 .wrangler/
 .dev.vars
+.aws-sam/
 coverage/
 .DS_Store
 GEOF
@@ -497,6 +616,11 @@ if ! $DRY_RUN; then
   echo "    cd $PROJECT_NAME/api"
   if [[ "$PLATFORM" == "cloudflare" ]]; then
     echo "    npx wrangler dev          # Start local dev server"
+  elif [[ "$PLATFORM" == "lambda" ]]; then
+    echo "    docker compose up -d      # Start PostgreSQL"
+    echo "    pnpm dev                  # Start dev server"
+    echo "    pnpm build:lambda         # Bundle for Lambda"
+    echo "    sam deploy --guided       # First AWS deploy"
   else
     echo "    docker compose up -d      # Start PostgreSQL"
     echo "    pnpm dev                  # Start dev server"

@@ -17,7 +17,7 @@ A Claude Code-integrated API & backend development framework with TypeScript, Ho
 - **12 Development Skills** — Automated workflows for schema parsing, TDD, route generation, authentication, validation, documentation
 - **10-Phase Schema-to-API Pipeline** — Convert OpenAPI specs into fully working, tested API servers with a single command
 - **TDD-Mandatory Development** — Integration tests written before route handlers, hard gate enforced
-- **Dual Deployment Targets** — Cloudflare Workers (edge) or Node.js (Docker) with one config change
+- **Three Deployment Targets** — Cloudflare Workers (edge), Node.js (Docker), or AWS Lambda (SAM) with one config change
 - **Testing Stack** — Vitest, supertest, contract tests against OpenAPI, k6 load tests
 - **Schema-First Design** — Database schemas, types, and validators all derived from your API spec
 
@@ -37,7 +37,7 @@ cd Nerva
 pnpm install
 
 # Initialize a new API project
-./scripts/setup-project.sh my-api --cloudflare   # or --node
+./scripts/setup-project.sh my-api --cloudflare   # or --node / --lambda
 
 # Start development
 cd api && pnpm dev
@@ -175,6 +175,7 @@ Full catalog: [`.claude/CUSTOM-AGENTS-GUIDE.md`](.claude/CUSTOM-AGENTS-GUIDE.md)
 | `templates/shared/` | ESLint, Prettier, TypeScript, Vitest configs |
 | `templates/cloudflare-workers/` | Wrangler config with Hyperdrive |
 | `templates/node-server/` | Dockerfile + docker-compose with PostgreSQL |
+| `templates/aws-lambda/` | SAM template, esbuild config, OIDC deploy workflow |
 | `templates/docker/` | Extended Docker with Redis + pgAdmin |
 
 ## Part of the PMDS Framework Series

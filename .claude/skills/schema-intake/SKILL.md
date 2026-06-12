@@ -84,7 +84,7 @@ continuing. Adapt follow-up questions based on responses.
 
 **Question 6 -- Deployment Target**
 > Where will this API be deployed?
-> Options: Cloudflare Workers (default), Node.js / Docker
+> Options: Cloudflare Workers (default), Node.js / Docker, AWS Lambda
 
 **Question 7 -- Additional Requirements** (optional)
 > Any special requirements? (pagination style, rate limiting, soft deletes, etc.)
@@ -294,7 +294,7 @@ interface BuildSpec {
     sourceType: 'file' | 'interview';
   };
   deployment: {
-    target: 'cloudflare-workers' | 'node';
+    target: 'cloudflare-workers' | 'node' | 'aws-lambda';
     runtime: string;
   };
   auth: {
@@ -553,7 +553,7 @@ function validateBuildSpec(spec: BuildSpec): string[] {
 | `tdd-from-schema` (Phase 2) | Reads `endpoints` and `auth` to generate test cases |
 | `route-generation` (Phase 3) | Reads `endpoints` to scaffold Hono route handlers |
 | `api-authentication` | Reads `auth` to configure JWT/API key middleware |
-| `deployment-config-generator` | Reads `deployment` to generate wrangler.toml or Dockerfile |
+| `deployment-config-generator` | Reads `deployment` to generate wrangler.toml, Dockerfile, or SAM template |
 | `api-documentation` | Reads the generated OpenAPI spec or regenerates from build-spec |
 
 ### Triggering the Next Phase

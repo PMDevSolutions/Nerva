@@ -1,0 +1,21 @@
+{
+  "extends": "../shared/tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "moduleResolution": "bundler",
+    "types": ["node"],
+    "rootDir": ".",
+    "rootDirs": ["shared/src", "aws-lambda/src"],
+    "paths": {}
+  },
+  "include": [
+    "shared/src/**/*.ts",
+    "aws-lambda/src/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "**/tests/**",
+    "cloudflare/**",
+    "node/**"
+  ]
+}

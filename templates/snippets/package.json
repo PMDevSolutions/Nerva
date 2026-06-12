@@ -6,7 +6,8 @@
   "scripts": {
     "typecheck:cf": "tsc --noEmit -p tsconfig.cloudflare.json",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json",
-    "typecheck": "pnpm run typecheck:cf && pnpm run typecheck:node"
+    "typecheck:lambda": "tsc --noEmit -p tsconfig.lambda.json",
+    "typecheck": "pnpm run typecheck:cf && pnpm run typecheck:node && pnpm run typecheck:lambda"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260415.1",

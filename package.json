@@ -28,7 +28,8 @@
     "openapi",
     "schema-first",
     "tdd",
-    "cloudflare-workers"
+    "cloudflare-workers",
+    "aws-lambda"
   ],
   "author": "PAMulligan",
   "license": "MIT",

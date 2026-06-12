@@ -1,0 +1,96 @@
+# Nerva API - AWS Lambda Configuration (AWS SAM)
+# Deploy: pnpm build:lambda && sam deploy --guided   (first deploy)
+#         pnpm run deploy                            (after samconfig.toml exists)
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Nerva API - Hono on AWS Lambda behind an API Gateway HTTP API
+
+Parameters:
+  DatabaseUrl:
+    Type: String
+    NoEcho: true
+    Description: >-
+      PostgreSQL connection string. Point this at RDS Proxy (or a serverless
+      driver endpoint such as Neon) so concurrent Lambda instances cannot
+      exhaust database connections.
+  JwtSecret:
+    Type: String
+    NoEcho: true
+    MinLength: 32
+    Description: JWT signing secret (min 32 characters)
+  LogLevel:
+    Type: String
+    Default: info
+    AllowedValues: [debug, info, warn, error]
+  AppVersion:
+    Type: String
+    Default: 0.0.1
+
+Globals:
+  Function:
+    Runtime: nodejs22.x
+    # arm64 (Graviton) costs less per millisecond and typically cold-starts
+    # faster than x86_64
+    Architectures: [arm64]
+    # Lambda allocates CPU proportionally to memory. 512 MB is a sensible
+    # floor for a bundled Hono API; benchmark with AWS Lambda Power Tuning
+    # before raising or lowering it.
+    MemorySize: 512
+    # Keep below API Gateway's hard 30-second integration timeout
+    Timeout: 28
+
+Resources:
+  # HTTP API (v2) -- cheaper and lower-latency than REST API. It sends payload
+  # format 2.0 events, which Hono's aws-lambda adapter handles natively.
+  HttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: $default
+      # CORS is handled by Hono middleware in src/index.ts. Configure it here
+      # instead if API Gateway should answer preflights without invoking the
+      # function:
+      # CorsConfiguration:
+      #   AllowOrigins:
+      #     - https://app.example.com
+      #   AllowMethods: [GET, POST, PUT, PATCH, DELETE, OPTIONS]
+      #   AllowHeaders: [Content-Type, Authorization]
+      #   MaxAge: 86400
+
+  ApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      # Prebuilt single-file bundle from `pnpm build:lambda` (esbuild.config.mjs)
+      CodeUri: dist/
+      Handler: lambda.handler
+      Description: Hono API handler
+      Environment:
+        Variables:
+          NODE_ENV: production
+          DATABASE_URL: !Ref DatabaseUrl
+          JWT_SECRET: !Ref JwtSecret
+          LOG_LEVEL: !Ref LogLevel
+          APP_VERSION: !Ref AppVersion
+          HEALTH_DB_TIMEOUT_MS: '2000'
+          # Readable stack traces from the minified bundle (dist/lambda.mjs.map)
+          NODE_OPTIONS: --enable-source-maps
+      Events:
+        # No Path/Method means SAM creates the $default catch-all route:
+        # every request reaches the function and Hono does the routing.
+        Root:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+      # Uncomment to keep instances warm for latency-critical workloads.
+      # SnapStart is not available for Node.js runtimes, so provisioned
+      # concurrency is the cold-start lever on Lambda:
+      # AutoPublishAlias: live
+      # ProvisionedConcurrencyConfig:
+      #   ProvisionedConcurrentExecutions: 2
+
+Outputs:
+  ApiUrl:
+    Description: HTTP API endpoint
+    Value: !Sub 'https://${HttpApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}'
+  ApiFunctionArn:
+    Description: Lambda function ARN
+    Value: !GetAtt ApiFunction.Arn

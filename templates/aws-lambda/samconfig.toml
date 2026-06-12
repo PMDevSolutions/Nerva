@@ -1,0 +1,35 @@
+# Nerva API - AWS SAM deployment configuration
+# https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/serverless-sam-cli-config.html
+#
+# Build the bundle first, then deploy:
+#   pnpm build:lambda
+#   sam deploy --parameter-overrides "DatabaseUrl=$DATABASE_URL JwtSecret=$JWT_SECRET"
+#
+# Secrets are NoEcho template parameters passed at deploy time -- never commit
+# them to this file. For production, prefer wiring AWS Secrets Manager or SSM
+# Parameter Store references into template.yaml.
+
+version = 0.1
+
+[default.global.parameters]
+stack_name = "nerva-api"
+
+[default.deploy.parameters]
+resolve_s3 = true
+s3_prefix = "nerva-api"
+region = "us-east-1"
+capabilities = "CAPABILITY_IAM"
+confirm_changeset = true
+fail_on_empty_changeset = false
+
+# Additional environments deploy as separate stacks:
+#   sam deploy --config-env staging
+#
+# [staging.global.parameters]
+# stack_name = "nerva-api-staging"
+#
+# [staging.deploy.parameters]
+# resolve_s3 = true
+# s3_prefix = "nerva-api-staging"
+# region = "us-east-1"
+# capabilities = "CAPABILITY_IAM"

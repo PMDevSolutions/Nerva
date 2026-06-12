@@ -1,6 +1,6 @@
 ---
 name: devops-automator
-description: API deployment and CI/CD specialist for Docker, GitHub Actions, Cloudflare Workers, and Node.js deployments. Use when setting up deployment pipelines, configuring Docker, managing Workers deployments, or automating build processes.
+description: API deployment and CI/CD specialist for Docker, GitHub Actions, Cloudflare Workers, Node.js, and AWS Lambda deployments. Use when setting up deployment pipelines, configuring Docker, managing Workers deployments, deploying with SAM, or automating build processes.
 color: blue
 tools: Bash, Read, Write, Grep, MultiEdit
 ---

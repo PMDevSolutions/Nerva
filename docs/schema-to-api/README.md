@@ -15,7 +15,7 @@ Convert an OpenAPI specification into a fully working, tested API server through
 | 7 | Validation Layer | Generate Zod schemas for request/response validation |
 | 8 | Auth & Security | Wire authentication middleware, CORS, rate limiting |
 | 9 | Documentation | Generate API docs, Swagger UI config, example responses |
-| 10 | Deployment Config | Produce Wrangler TOML, Dockerfile, or both |
+| 10 | Deployment Config | Produce Wrangler TOML, Dockerfile, or SAM template |
 
 ## Phase-by-Phase Deep Dive
 
@@ -102,12 +102,12 @@ Convert an OpenAPI specification into a fully working, tested API server through
 
 ### Phase 10: Deployment Config
 
-**What it does:** Produces deployment configuration files matching the target platform. For Cloudflare Workers: `wrangler.toml` with D1 bindings. For Node.js: `Dockerfile` with multi-stage build and `docker-compose.yml`.
+**What it does:** Produces deployment configuration files matching the target platform. For Cloudflare Workers: `wrangler.toml` with D1 bindings. For Node.js: `Dockerfile` with multi-stage build and `docker-compose.yml`. For AWS Lambda: `template.yaml` (SAM with an API Gateway HTTP API), `samconfig.toml`, esbuild bundle config, and an OIDC-based deploy workflow.
 
 - **Inputs:** Project structure, database config, environment variables
-- **Outputs:** `wrangler.toml` and/or `Dockerfile` + `docker-compose.yml`
+- **Outputs:** `wrangler.toml`, `Dockerfile` + `docker-compose.yml`, or `template.yaml` + `samconfig.toml` + `esbuild.config.mjs`
 - **Tools:** `deployment-config-generator` skill
-- **Config:** `pipeline.config.json` -- `deployment.target` (cloudflare, node, both)
+- **Config:** `pipeline.config.json` -- `deployment.target` (cloudflare, node, aws-lambda, both)
 
 ## Configuration
 
