@@ -68,7 +68,7 @@
     "noAnyTypes": true
   },
   "deployment": {
-    "targets": ["cloudflare-workers", "node-docker", "aws-lambda"],
+    "targets": ["cloudflare-workers", "node-docker", "aws-lambda", "railway"],
     "defaultTarget": "cloudflare-workers",
     "cloudflareWorkers": {
       "compatibilityDate": "2024-12-01",
@@ -95,6 +95,15 @@
       "bundler": "esbuild",
       "framework": "sam",
       "provisionedConcurrency": 0
+    },
+    "railway": {
+      "builder": "dockerfile",
+      "healthcheckPath": "/health",
+      "healthcheckTimeoutSeconds": 300,
+      "restartPolicy": "on-failure",
+      "restartPolicyMaxRetries": 10,
+      "managedPostgres": true,
+      "autoDeployFromGitHub": true
     },
     "cicd": {
       "provider": "github-actions",

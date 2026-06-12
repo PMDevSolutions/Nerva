@@ -1,0 +1,36 @@
+# Nerva API - Railway configuration (config as code)
+# https://docs.railway.com/reference/config-as-code
+#
+# Railway builds this service from the Dockerfile -- the same hardened
+# multi-stage image used by the Node.js target -- so what deploys is exactly
+# what `docker compose up` runs locally. To build with Nixpacks instead, set
+# builder = "NIXPACKS"; nixpacks.toml then controls the toolchain.
+#
+# One dashboard setting is required: Settings -> Source -> Root Directory = "api"
+# so Railway picks up this file and the Dockerfile.
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+# Rebuild only when service files change (skip docs-only commits)
+watchPatterns = ["src/**", "package.json", "pnpm-lock.yaml", "Dockerfile"]
+
+[deploy]
+startCommand = "node dist/index.js"
+# Each deploy must answer on /health before traffic switches over; a failing
+# check keeps the previous deployment live.
+healthcheckPath = "/health"
+healthcheckTimeout = 300
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
+numReplicas = 1
+# Run migrations before each deploy goes live. Requires drizzle-kit inside the
+# image -- the production Dockerfile prunes dev dependencies, so either run
+# migrations from your machine (railway run pnpm db:migrate) or switch to the
+# Nixpacks build before uncommenting:
+# preDeployCommand = "pnpm db:migrate"
+
+# Environment variables are set on the Railway service (Variables tab), not in
+# this file. Wire the managed PostgreSQL with a reference variable:
+#   DATABASE_URL = ${{Postgres.DATABASE_URL}}
+# Railway injects PORT automatically; the server binds it at startup.

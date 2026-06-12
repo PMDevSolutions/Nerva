@@ -1,0 +1,18 @@
+# Nerva API - Nixpacks build configuration (alternative to the Dockerfile)
+# https://nixpacks.com/docs/configuration/file
+#
+# Only used when railway.toml sets builder = "NIXPACKS". Nixpacks auto-detects
+# Node.js + pnpm from pnpm-lock.yaml; this file pins the toolchain and the
+# build/start commands explicitly so builds stay reproducible.
+
+[phases.setup]
+nixPkgs = ["nodejs_22", "pnpm"]
+
+[phases.install]
+cmds = ["pnpm install --frozen-lockfile"]
+
+[phases.build]
+cmds = ["pnpm build"]
+
+[start]
+cmd = "node dist/index.js"
