@@ -230,6 +230,35 @@ jobs:
         run: pnpm exec tsc --noEmit -p tsconfig.lambda.json
         working-directory: templates/snippets
 
+  # Generates a real project per target with setup-project.sh and type-checks
+  # it. Unlike typecheck-templates this has no lockfile on purpose: it installs
+  # whatever `pnpm add` resolves today, so a dependency release that breaks
+  # freshly generated projects (e.g. the TypeScript 6 @types auto-include
+  # removal, #119) fails here instead of only on user machines.
+  generated-projects:
+    name: Generate & Type-check (${{ matrix.platform }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [cloudflare, node, lambda, railway, fly]
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - run: corepack enable
+
+      - name: Generate project
+        run: ./scripts/setup-project.sh demo-${{ matrix.platform }} --${{ matrix.platform }}
+
+      - name: Type-check generated project
+        run: pnpm typecheck
+        working-directory: demo-${{ matrix.platform }}/api
+
   check-links:
     name: Check Markdown Links
     runs-on: ubuntu-latest
