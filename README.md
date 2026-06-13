@@ -86,6 +86,8 @@ Structured interview (7-10 questions) that generates an OpenAPI spec, then feeds
 
 Takes an [Aurelius](https://github.com/PMDevSolutions/Aurelius) frontend `build-spec.json` and generates the matching backend API. This enables a full-stack workflow: design in Figma, build frontend with Aurelius, generate backend with Nerva, share a typed API client.
 
+See the [Aurelius → Nerva walkthrough](docs/schema-to-api/aurelius-pipeline.md) for a worked example: a frontend `build-spec.json`, the OpenAPI spec it generates, the component-to-endpoint mapping, and the typed client that bridges both sides.
+
 ## Directory Structure
 
 ```
@@ -205,6 +207,7 @@ Nerva is the backend counterpart in a family of Claude Code-integrated developme
 | Architecture | [`docs/onboarding/architecture.md`](docs/onboarding/architecture.md) | System architecture overview |
 | Troubleshooting | [`docs/onboarding/troubleshooting.md`](docs/onboarding/troubleshooting.md) | Common issues and solutions |
 | Pipeline guide | [`docs/schema-to-api/README.md`](docs/schema-to-api/README.md) | 10-phase pipeline deep dive |
+| Aurelius pipeline | [`docs/schema-to-api/aurelius-pipeline.md`](docs/schema-to-api/aurelius-pipeline.md) | Generate a backend from an Aurelius frontend build-spec |
 | API standards | [`docs/api-development/README.md`](docs/api-development/README.md) | TypeScript, Hono, testing conventions |
 | Agent catalog | [`.claude/CUSTOM-AGENTS-GUIDE.md`](.claude/CUSTOM-AGENTS-GUIDE.md) | All 24 agents with use cases |
 | Plugin reference | [`.claude/PLUGINS-REFERENCE.md`](.claude/PLUGINS-REFERENCE.md) | Plugin configuration and commands |
