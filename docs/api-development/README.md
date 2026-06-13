@@ -355,6 +355,8 @@ See the [error handling guide](./error-handling.md) for the full format definiti
 - Use pagination with `limit` and `offset` or cursor-based pagination for large datasets
 - Add indexes for columns used in `WHERE`, `ORDER BY`, and `JOIN` clauses
 
+See the [database indexing guide](./database-indexing.md) for composite, partial, and covering indexes in Drizzle, when to choose B-tree vs. GIN vs. GiST, the indexing anti-patterns that slow APIs down, and how to validate index usage with `EXPLAIN ANALYZE`.
+
 ### Caching
 
 Use `Cache-Control` headers for GET endpoints. On Cloudflare Workers, leverage the Cache API:
