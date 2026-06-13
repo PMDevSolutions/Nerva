@@ -61,7 +61,7 @@ Shell scripts for common development tasks:
 
 | Script | Purpose |
 |--------|---------|
-| `setup-project.sh` | Initialize a new API project (--cloudflare, --node, --lambda, or --railway) |
+| `setup-project.sh` | Initialize a new API project (--cloudflare, --node, --lambda, --railway, or --fly) |
 | `run-tests.sh` | Vitest test suite with coverage |
 | `check-types.sh` | TypeScript strict mode checking |
 | `security-scan.sh` | Dependency and code security audit |
@@ -71,7 +71,7 @@ Shell scripts for common development tasks:
 | `generate-openapi-docs.sh` | Build API documentation |
 | `generate-client.sh` | Generate typed API client for frontends |
 
-### Templates (6 directories)
+### Templates (7 directories)
 
 Starter configurations for different deployment targets:
 
@@ -82,6 +82,7 @@ Starter configurations for different deployment targets:
 | `templates/node-server/` | Dockerfile + docker-compose with PostgreSQL |
 | `templates/aws-lambda/` | SAM template (API Gateway HTTP API), esbuild config, OIDC deploy workflow |
 | `templates/railway/` | Railway config-as-code (Docker build, health check) + Nixpacks config |
+| `templates/fly/` | Fly.io config (HTTP service, health check, Machine autoscaling) |
 | `templates/docker/` | Extended Docker setup with Redis + pgAdmin |
 
 ## Pipelines

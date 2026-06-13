@@ -68,7 +68,7 @@
     "noAnyTypes": true
   },
   "deployment": {
-    "targets": ["cloudflare-workers", "node-docker", "aws-lambda", "railway"],
+    "targets": ["cloudflare-workers", "node-docker", "aws-lambda", "railway", "fly"],
     "defaultTarget": "cloudflare-workers",
     "cloudflareWorkers": {
       "compatibilityDate": "2024-12-01",
@@ -104,6 +104,17 @@
       "restartPolicyMaxRetries": 10,
       "managedPostgres": true,
       "autoDeployFromGitHub": true
+    },
+    "fly": {
+      "builder": "dockerfile",
+      "internalPort": 3000,
+      "healthcheckPath": "/health",
+      "autoStopMachines": "stop",
+      "autoStartMachines": true,
+      "minMachinesRunning": 1,
+      "maxMachines": 3,
+      "managedPostgres": true,
+      "autoDeployFromGitHub": false
     },
     "cicd": {
       "provider": "github-actions",

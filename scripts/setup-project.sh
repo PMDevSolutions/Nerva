@@ -3,7 +3,7 @@ set -euo pipefail
 
 # ============================================================================
 # setup-project.sh - Initialize a new Nerva API project
-# Usage: ./scripts/setup-project.sh <project-name> [--cloudflare|--node|--lambda|--railway] [--dry-run]
+# Usage: ./scripts/setup-project.sh <project-name> [--cloudflare|--node|--lambda|--railway|--fly] [--dry-run]
 # ============================================================================
 
 RED='\033[0;31m'
@@ -26,11 +26,12 @@ TEMPLATES_DIR="$PROJECT_ROOT/templates"
 
 if [[ $# -lt 1 ]]; then
   error "Missing project name."
-  echo "Usage: $0 <project-name> [--cloudflare|--node|--lambda|--railway] [--dry-run]"
+  echo "Usage: $0 <project-name> [--cloudflare|--node|--lambda|--railway|--fly] [--dry-run]"
   echo "  --cloudflare   Set up for Cloudflare Workers deployment"
   echo "  --node         Set up for Node.js / Docker deployment (default)"
   echo "  --lambda       Set up for AWS Lambda deployment (SAM + API Gateway HTTP API)"
   echo "  --railway      Set up for Railway deployment (Docker build + managed PostgreSQL)"
+  echo "  --fly          Set up for Fly.io deployment (Docker build + Fly Machines + managed PostgreSQL)"
   echo "  --dry-run      Preview what would be created without making changes"
   exit 1
 fi
@@ -46,6 +47,7 @@ while [[ $# -gt 0 ]]; do
     --node)       PLATFORM="node"; shift ;;
     --lambda)     PLATFORM="lambda"; shift ;;
     --railway)    PLATFORM="railway"; shift ;;
+    --fly)        PLATFORM="fly"; shift ;;
     --dry-run)    DRY_RUN=true; shift ;;
     *)            error "Unknown option: $1"; exit 1 ;;
   esac
@@ -325,6 +327,34 @@ RENVEOF
   fi
 
   success "Railway configured. Connect the repo in Railway and set Root Directory to 'api'."
+elif [[ "$PLATFORM" == "fly" ]]; then
+  step "Setting up Fly.io..."
+  # Fly.io builds the same multi-stage image as the Node.js target
+  copy_file "$TEMPLATES_DIR/node-server/Dockerfile" "$API_DIR/Dockerfile"
+  copy_file "$TEMPLATES_DIR/node-server/docker-compose.yml" "$API_DIR/docker-compose.yml"
+  copy_file "$TEMPLATES_DIR/fly/fly.toml" "$API_DIR/fly.toml"
+
+  write_file "$API_DIR/.env.example" << 'FENVEOF'
+# Local development values. On Fly.io, non-secret config lives in the [env]
+# section of fly.toml; secrets are set with flyctl and override [env]:
+#   fly secrets set JWT_SECRET=$(openssl rand -hex 32)
+# Attaching Managed Postgres (fly mpg attach) sets DATABASE_URL automatically.
+NODE_ENV=development
+PORT=3000
+DATABASE_URL=postgresql://nerva:nerva_secret@localhost:5432/nerva_db
+LOG_LEVEL=debug
+APP_VERSION=0.0.1
+HEALTH_DB_TIMEOUT_MS=2000
+# Required in production (min 32 chars). Generate with: openssl rand -hex 32
+JWT_SECRET=dev-secret-change-me-in-production-min-32-chars
+FENVEOF
+
+  if ! command -v fly &>/dev/null && ! command -v flyctl &>/dev/null; then
+    warn "Fly.io CLI (flyctl) not found. Install it before deploying:"
+    warn "  https://fly.io/docs/flyctl/install/"
+  fi
+
+  success "Fly.io configured. Run 'fly launch --no-deploy' from api/ to set the app name in fly.toml."
 else
   step "Setting up Node.js / Docker..."
   copy_file "$TEMPLATES_DIR/node-server/Dockerfile" "$API_DIR/Dockerfile"
@@ -358,6 +388,10 @@ elif [[ "$PLATFORM" == "lambda" ]]; then
 elif [[ "$PLATFORM" == "railway" ]]; then
   DEV_BASE_URL="http://localhost:3000"
   PLATFORM_LABEL="Railway"
+  DEV_STEPS=$'docker compose up -d      # start PostgreSQL\npnpm dev                  # start the dev server'
+elif [[ "$PLATFORM" == "fly" ]]; then
+  DEV_BASE_URL="http://localhost:3000"
+  PLATFORM_LABEL="Fly.io"
   DEV_STEPS=$'docker compose up -d      # start PostgreSQL\npnpm dev                  # start the dev server'
 else
   DEV_BASE_URL="http://localhost:3000"
@@ -638,6 +672,80 @@ To build without the Dockerfile, set `builder = "NIXPACKS"` in
 build/start commands. The Dockerfile build stays the default because it ships
 the exact image you can test locally.
 READMERAILWAY
+  elif [[ "$PLATFORM" == "fly" ]]; then
+    cat << 'READMEFLY'
+
+## Deploying to Fly.io
+
+The API deploys to [Fly.io](https://fly.io) as Machines built from
+`api/Dockerfile` (the same hardened multi-stage image as the Node.js target),
+configured by `api/fly.toml` -- so what deploys is exactly what
+`docker compose up` runs locally.
+
+### One-time setup
+
+1. Install [flyctl](https://fly.io/docs/flyctl/install/) and sign in with
+   `fly auth login`.
+2. Create the app from `api/` -- `fly launch` adopts the existing `fly.toml`,
+   prompts for a globally unique app name, and writes it back:
+
+   ```bash
+   cd api
+   fly launch --no-deploy
+   ```
+
+3. Create and attach [Managed Postgres](https://fly.io/docs/mpg/). Attaching
+   sets the `DATABASE_URL` secret on the app automatically:
+
+   ```bash
+   fly mpg create
+   fly mpg attach <cluster-id> -a <app-name>
+   ```
+
+4. Set the remaining secrets (non-secret config lives in the `[env]` section
+   of `fly.toml`):
+
+   ```bash
+   fly secrets set JWT_SECRET=$(openssl rand -hex 32)
+   ```
+
+### Deploys
+
+```bash
+fly deploy                  # build and deploy from api/
+```
+
+Each deploy must answer on `/health` (`[[http_service.checks]]` in `fly.toml`)
+before Machines take traffic; a failing check keeps the previous version live.
+Fly.io does not auto-deploy from GitHub -- for continuous deployment, add a
+[GitHub Actions workflow](https://fly.io/docs/launch/continuous-deployment-with-github-actions/)
+that runs `flyctl deploy --remote-only` with a `FLY_API_TOKEN` secret.
+
+### Scaling
+
+`fly.toml` keeps at least one Machine running (`min_machines_running = 1`) and
+stops idle Machines; stopped Machines restart automatically on incoming
+traffic. The ceiling is the number of Machines that exist, so create three for
+min 1 / max 3 autoscaling:
+
+```bash
+fly scale count 3
+```
+
+### Migrations
+
+Run database migrations against the Fly.io database from your machine through
+a local proxy:
+
+```bash
+fly mpg proxy               # forwards a local port to the database
+DATABASE_URL=<proxied-connection-string> pnpm db:migrate
+```
+
+A `release_command` in `fly.toml` could run migrations on each deploy instead,
+but the production image prunes dev dependencies (no drizzle-kit), so the
+proxy approach is the default -- see the comments in `fly.toml`.
+READMEFLY
   fi
   cat << 'READMESTATIC'
 
@@ -713,6 +821,11 @@ if ! $DRY_RUN; then
     echo "    pnpm dev                  # Start dev server"
     echo "    railway init              # Create Railway project (or connect GitHub)"
     echo "    railway up                # Deploy from the CLI"
+  elif [[ "$PLATFORM" == "fly" ]]; then
+    echo "    docker compose up -d      # Start PostgreSQL"
+    echo "    pnpm dev                  # Start dev server"
+    echo "    fly launch --no-deploy    # Create the Fly.io app (adopts fly.toml)"
+    echo "    fly deploy                # Deploy to Fly.io"
   else
     echo "    docker compose up -d      # Start PostgreSQL"
     echo "    pnpm dev                  # Start dev server"

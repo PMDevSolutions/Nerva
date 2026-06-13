@@ -30,7 +30,8 @@
     "tdd",
     "cloudflare-workers",
     "aws-lambda",
-    "railway"
+    "railway",
+    "flyio"
   ],
   "author": "PAMulligan",
   "license": "MIT",

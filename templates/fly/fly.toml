@@ -1,0 +1,63 @@
+# Nerva API - Fly.io configuration
+# https://fly.io/docs/reference/configuration/
+#
+# Fly.io builds this app from the Dockerfile -- the same hardened multi-stage
+# image used by the Node.js target -- so what deploys is exactly what
+# `docker compose up` runs locally.
+#
+# Replace the app name below before deploying. App names are globally unique;
+# running `fly launch --no-deploy` from api/ adopts this file, prompts for a
+# name, and writes it back.
+
+app = "my-api"
+primary_region = "iad"
+
+[build]
+dockerfile = "Dockerfile"
+
+# Non-secret configuration. Secrets (JWT_SECRET, DATABASE_URL) are set with
+# `fly secrets set` and override [env] values. Attaching Managed Postgres
+# (fly mpg attach) sets the DATABASE_URL secret automatically:
+#   https://fly.io/docs/mpg/
+[env]
+NODE_ENV = "production"
+PORT = "3000"
+LOG_LEVEL = "info"
+
+[deploy]
+# Run migrations before each deploy goes live. Requires drizzle-kit inside the
+# image -- the production Dockerfile prunes dev dependencies, so run
+# migrations from your machine through `fly mpg proxy` instead, or add
+# drizzle-kit to the production image before uncommenting:
+# release_command = "pnpm db:migrate"
+
+[http_service]
+internal_port = 3000
+force_https = true
+# Autoscaling: Fly stops idle Machines down to min_machines_running and
+# restarts them on incoming traffic, up to the number of Machines that exist.
+# Create the ceiling with `fly scale count 3` for min 1 / max 3:
+#   https://fly.io/docs/launch/autostop-autostart/
+auto_stop_machines = "stop"
+auto_start_machines = true
+min_machines_running = 1
+
+# Per-Machine request limits; crossing soft_limit is what triggers Fly to
+# start a stopped Machine.
+[http_service.concurrency]
+type = "requests"
+soft_limit = 200
+hard_limit = 250
+
+# Each deploy must answer on /health before Machines take traffic; a failing
+# check keeps the previous version live.
+[[http_service.checks]]
+method = "GET"
+path = "/health"
+interval = "15s"
+timeout = "5s"
+grace_period = "10s"
+
+[[vm]]
+size = "shared-cpu-1x"
+memory = "512mb"
