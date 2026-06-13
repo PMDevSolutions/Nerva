@@ -200,6 +200,7 @@ Nerva is the backend counterpart in a family of Claude Code-integrated developme
 | Document | Location | Description |
 |----------|----------|-------------|
 | Quickstart | [`docs/onboarding/quickstart.md`](docs/onboarding/quickstart.md) | Get your first API running |
+| Migrate from Express | [`docs/migration/from-express.md`](docs/migration/from-express.md) | Express → Hono cheat sheet and porting guide |
 | Architecture | [`docs/onboarding/architecture.md`](docs/onboarding/architecture.md) | System architecture overview |
 | Troubleshooting | [`docs/onboarding/troubleshooting.md`](docs/onboarding/troubleshooting.md) | Common issues and solutions |
 | Pipeline guide | [`docs/schema-to-api/README.md`](docs/schema-to-api/README.md) | 10-phase pipeline deep dive |
