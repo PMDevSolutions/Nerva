@@ -347,6 +347,12 @@ All error responses follow the same shape -- a single top-level `error` object:
 
 See the [error handling guide](./error-handling.md) for the full format definition, error code constants, typed error classes, the global `app.onError()` handler, per-category examples, and how the format maps to RFC 9457 Problem Details.
 
+## API Versioning
+
+Nerva versions APIs by URL prefix -- `/api/v1/...` -- configured in the `api.versioning` block of `.claude/pipeline.config.json` (`strategy: "url-prefix"`, `currentVersion: "v1"`). Add endpoints and optional fields within a version; bump to `/api/v2` only for breaking changes, and warn consumers first with `Deprecation` and `Sunset` headers.
+
+See the [API versioning guide](./api-versioning.md) for all four strategies (URL prefix, header, content negotiation, query parameter) and how to implement each in Hono, the deprecation and sunset headers, the breaking vs. non-breaking reference, and a migration checklist for version bumps.
+
 ## Performance
 
 ### Query Optimization
