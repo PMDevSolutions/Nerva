@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.env
+.env.local
+.env.*.local
+*.log
+.wrangler/
+.dev.vars
+.aws-sam/
+coverage/
+.DS_Store
