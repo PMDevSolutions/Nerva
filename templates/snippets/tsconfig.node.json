@@ -1,9 +1,8 @@
 {
-  "extends": "../shared/tsconfig.json",
+  "extends": "../shared/tsconfig.node.json",
   "compilerOptions": {
     "noEmit": true,
     "moduleResolution": "bundler",
-    "types": ["node"],
     "rootDir": ".",
     "rootDirs": ["shared/src", "node/src"],
     "paths": {}

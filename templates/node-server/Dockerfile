@@ -13,7 +13,7 @@ COPY package.json pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 
 # Copy source code
-COPY tsconfig.json drizzle.config.ts ./
+COPY tsconfig.json tsconfig.base.json drizzle.config.ts ./
 COPY src/ ./src/
 
 # Build the application

@@ -124,7 +124,16 @@ make_dirs "$TARGET_DIR/docs"
 success "Directory structure created."
 
 step "Copying shared configuration templates..."
-copy_file "$TEMPLATES_DIR/shared/tsconfig.json"      "$API_DIR/tsconfig.json"
+# TypeScript 6 no longer auto-includes node_modules/@types/*, so each target
+# gets a tsconfig.json that opts into its globals via "types" on top of the
+# shared base. templates/snippets/tsconfig.*.json extend the same per-target
+# files, so the typecheck-templates CI job checks exactly what ships here.
+copy_file "$TEMPLATES_DIR/shared/tsconfig.base.json" "$API_DIR/tsconfig.base.json"
+if [[ "$PLATFORM" == "cloudflare" ]]; then
+  copy_file "$TEMPLATES_DIR/shared/tsconfig.cloudflare.json" "$API_DIR/tsconfig.json"
+else
+  copy_file "$TEMPLATES_DIR/shared/tsconfig.node.json"       "$API_DIR/tsconfig.json"
+fi
 copy_file "$TEMPLATES_DIR/shared/eslint.config.js"   "$API_DIR/eslint.config.js"
 copy_file "$TEMPLATES_DIR/shared/prettier.config.js" "$API_DIR/prettier.config.js"
 copy_file "$TEMPLATES_DIR/shared/vitest.config.ts"   "$API_DIR/vitest.config.ts"
@@ -176,9 +185,12 @@ run_cmd pnpm add hono drizzle-orm postgres zod @hono/zod-validator
 success "Production dependencies installed."
 
 step "Installing dev dependencies..."
-# NOTE: @types/node and @cloudflare/workers-types (added per-platform below)
-# also live in templates/snippets/package.json — bump in both places.
-run_cmd pnpm add -D vitest typescript eslint prettier drizzle-kit @types/node tsx \
+# NOTE: @types/node and @cloudflare/workers-types (added in the cloudflare
+# branch below) also live in templates/snippets/package.json — bump in both
+# places. typescript is pinned to its major because a new major can change how
+# generated projects compile (TS 6 stopped auto-including @types/*); bump it
+# deliberately, together with the snippets and the shared tsconfig templates.
+run_cmd pnpm add -D vitest typescript@^6 eslint prettier drizzle-kit @types/node tsx \
   @eslint/js typescript-eslint @vitest/coverage-v8
 success "Dev dependencies installed."
 
@@ -248,7 +260,8 @@ success "Initial source files created."
 # ---- Platform-specific setup ----
 if [[ "$PLATFORM" == "cloudflare" ]]; then
   step "Setting up Cloudflare Workers..."
-  run_cmd pnpm add -D wrangler
+  # @cloudflare/workers-types backs the "types" entry in the cloudflare tsconfig
+  run_cmd pnpm add -D wrangler @cloudflare/workers-types
   copy_file "$TEMPLATES_DIR/cloudflare-workers/wrangler.toml" "$API_DIR/wrangler.toml"
 
   write_file "$API_DIR/.dev.vars.example" << 'DVEOF'
