@@ -43,7 +43,9 @@ pnpm install
 cd api && pnpm dev
 ```
 
-> **New to Nerva?** See the [Todo API example](examples/todo-api-cloudflare/) for a complete working Cloudflare Workers project with CRUD, D1, Zod validation, and tests.
+> **New to Nerva?** Two complete working examples show both deployment paths:
+> - [Todo API example](examples/todo-api-cloudflare/) — Cloudflare Workers (edge) with CRUD, D1, Zod validation, and tests.
+> - [Blog API example](examples/blog-api-node/) — Node.js/Docker (server) with related resources (users → posts → comments), JWT auth with refresh tokens, offset pagination, PostgreSQL + Drizzle migrations, and Docker Compose orchestration.
 
 ## Pipelines
 

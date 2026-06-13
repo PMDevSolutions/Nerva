@@ -1,0 +1,81 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: blog-api-node:local
+    container_name: blog-api
+    restart: unless-stopped
+    ports:
+      - '${PORT:-3000}:3000'
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-blog}:${POSTGRES_PASSWORD:-blog_secret}@postgres:5432/${POSTGRES_DB:-blog_db}
+      PORT: 3000
+      LOG_LEVEL: ${LOG_LEVEL:-debug}
+      # Required by the API (min 32 chars). Override in production:
+      #   JWT_SECRET=$(openssl rand -hex 32) docker compose up -d
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me-in-production-min-32-chars}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - blog-network
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:3000/health']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # One-shot job that applies the committed Drizzle migrations before the API
+  # starts. It runs the compiled migration runner (src/db/migrate.ts) inside
+  # the same production image as the API — drizzle-orm ships the migrator as
+  # a runtime dependency, so no dev tooling is needed in the container.
+  # Seed the database with: docker compose run --rm migrate node dist/db/seed.js
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: blog-api-node:local
+    container_name: blog-api-migrate
+    command: ['node', 'dist/db/migrate.js']
+    restart: 'no'
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-blog}:${POSTGRES_PASSWORD:-blog_secret}@postgres:5432/${POSTGRES_DB:-blog_db}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - blog-network
+
+  postgres:
+    image: postgres:17-alpine
+    container_name: blog-postgres
+    restart: unless-stopped
+    ports:
+      - '${DB_PORT:-5432}:5432'
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-blog}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-blog_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-blog_db}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - blog-network
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-blog} -d ${POSTGRES_DB:-blog_db}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  blog-network:
+    driver: bridge
