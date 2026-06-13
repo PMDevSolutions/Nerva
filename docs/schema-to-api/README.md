@@ -2,6 +2,15 @@
 
 Convert an OpenAPI specification into a fully working, tested API server through an automated 10-phase pipeline.
 
+## Where the Spec Comes From
+
+The pipeline below starts from an OpenAPI specification. Write that spec by hand, or generate it:
+
+- **From an Aurelius frontend** -- [`/build-from-aurelius`](./aurelius-pipeline.md) reads a frontend `build-spec.json`, infers the API it needs, generates the OpenAPI spec, and feeds it into the phases below. See the [Aurelius → Nerva walkthrough](./aurelius-pipeline.md).
+- **From a conversation** -- `/build-from-conversation` generates the spec through a structured interview.
+
+Both converge on the same 10 phases.
+
 ## Pipeline Overview
 
 | Phase | Name | Description |
