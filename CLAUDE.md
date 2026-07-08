@@ -41,7 +41,8 @@ project-root/
 │   ├── aws-lambda/         # SAM template, esbuild config, OIDC deploy workflow
 │   ├── railway/            # Railway config-as-code (railway.toml, nixpacks.toml)
 │   ├── fly/                # Fly.io config (fly.toml)
-│   └── docker/             # Dockerfile, docker-compose
+│   ├── docker/             # Dockerfile, docker-compose
+│   └── multi-tenant/       # RLS policy template for --multi-tenant projects
 ├── docs/
 │   ├── schema-to-api/      # Pipeline guide
 │   └── api-development/    # Development standards
@@ -61,6 +62,7 @@ project-root/
 ```bash
 # Setup a new API project
 ./scripts/setup-project.sh my-api --cloudflare  # or --node / --lambda / --railway / --fly
+# add --multi-tenant for tenant-isolated SaaS scaffolding (see docs/api-development/multi-tenancy.md)
 
 # Run tests with coverage
 ./scripts/run-tests.sh
@@ -493,9 +495,10 @@ pnpm drizzle-kit studio             # Open database GUI
 ./scripts/setup-project.sh my-api --lambda       # New AWS Lambda (SAM) project
 ./scripts/setup-project.sh my-api --railway      # New Railway project
 ./scripts/setup-project.sh my-api --fly          # New Fly.io project
+./scripts/setup-project.sh my-api --node --multi-tenant  # Multi-tenant SaaS (row/schema isolation)
 ```
 
 ---
 
-**Last Updated:** 2026-06-12
+**Last Updated:** 2026-07-07
 **Architecture:** 24 agents, 12 skills, 4 plugins + gh CLI, 9 scripts

@@ -38,6 +38,7 @@ pnpm install
 
 # Initialize a new API project
 ./scripts/setup-project.sh my-api --cloudflare   # or --node / --lambda / --railway / --fly
+# add --multi-tenant for tenant-isolated SaaS scaffolding
 
 # Start development
 cd api && pnpm dev
@@ -183,6 +184,7 @@ Full catalog: [`.claude/CUSTOM-AGENTS-GUIDE.md`](.claude/CUSTOM-AGENTS-GUIDE.md)
 | `templates/railway/` | Railway config-as-code + Nixpacks build config |
 | `templates/fly/` | Fly.io config (HTTP service, health check, autoscaling) |
 | `templates/docker/` | Extended Docker with Redis + pgAdmin |
+| `templates/multi-tenant/` | RLS policy template for tenant isolation (`--multi-tenant` flag) |
 
 ## Part of the PMDS Framework Series
 

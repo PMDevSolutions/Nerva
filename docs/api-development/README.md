@@ -353,6 +353,12 @@ Nerva versions APIs by URL prefix -- `/api/v1/...` -- configured in the `api.ver
 
 See the [API versioning guide](./api-versioning.md) for all four strategies (URL prefix, header, content negotiation, query parameter) and how to implement each in Hono, the deprecation and sunset headers, the breaking vs. non-breaking reference, and a migration checklist for version bumps.
 
+## Multi-Tenancy
+
+Generate tenant-isolated SaaS projects with `./scripts/setup-project.sh my-saas --node --multi-tenant`. Two isolation strategies are supported, selected via `TENANCY_STRATEGY`: row-based (shared tables with a `tenant_id` column, tenant-scoped query helpers, and PostgreSQL Row Level Security as a fail-closed backstop) and schema-based (one PostgreSQL schema per tenant, switched with transaction-scoped `search_path`). Tenants are resolved per request from the JWT claim, subdomain, or `X-Tenant-ID` header.
+
+See the [multi-tenancy guide](./multi-tenancy.md) for the trade-offs between the two strategies, the resolution middleware, RLS policy setup, per-tenant schema migrations, pooling caveats, and how to run the tenant-isolation test suite against a live database.
+
 ## Performance
 
 ### Query Optimization
