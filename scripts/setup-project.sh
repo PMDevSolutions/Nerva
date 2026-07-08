@@ -3,7 +3,7 @@ set -euo pipefail
 
 # ============================================================================
 # setup-project.sh - Initialize a new Nerva API project
-# Usage: ./scripts/setup-project.sh <project-name> [--cloudflare|--node|--lambda|--railway|--fly] [--dry-run]
+# Usage: ./scripts/setup-project.sh <project-name> [--cloudflare|--node|--lambda|--railway|--fly] [--multi-tenant] [--dry-run]
 # ============================================================================
 
 RED='\033[0;31m'
@@ -26,13 +26,14 @@ TEMPLATES_DIR="$PROJECT_ROOT/templates"
 
 if [[ $# -lt 1 ]]; then
   error "Missing project name."
-  echo "Usage: $0 <project-name> [--cloudflare|--node|--lambda|--railway|--fly] [--dry-run]"
-  echo "  --cloudflare   Set up for Cloudflare Workers deployment"
-  echo "  --node         Set up for Node.js / Docker deployment (default)"
-  echo "  --lambda       Set up for AWS Lambda deployment (SAM + API Gateway HTTP API)"
-  echo "  --railway      Set up for Railway deployment (Docker build + managed PostgreSQL)"
-  echo "  --fly          Set up for Fly.io deployment (Docker build + Fly Machines + managed PostgreSQL)"
-  echo "  --dry-run      Preview what would be created without making changes"
+  echo "Usage: $0 <project-name> [--cloudflare|--node|--lambda|--railway|--fly] [--multi-tenant] [--dry-run]"
+  echo "  --cloudflare    Set up for Cloudflare Workers deployment"
+  echo "  --node          Set up for Node.js / Docker deployment (default)"
+  echo "  --lambda        Set up for AWS Lambda deployment (SAM + API Gateway HTTP API)"
+  echo "  --railway       Set up for Railway deployment (Docker build + managed PostgreSQL)"
+  echo "  --fly           Set up for Fly.io deployment (Docker build + Fly Machines + managed PostgreSQL)"
+  echo "  --multi-tenant  Add multi-tenant SaaS scaffolding (tenant resolution, scoped queries, RLS)"
+  echo "  --dry-run       Preview what would be created without making changes"
   exit 1
 fi
 
@@ -40,16 +41,18 @@ PROJECT_NAME="$1"
 shift
 
 PLATFORM="node"
+MULTI_TENANT=false
 DRY_RUN=false
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --cloudflare) PLATFORM="cloudflare"; shift ;;
-    --node)       PLATFORM="node"; shift ;;
-    --lambda)     PLATFORM="lambda"; shift ;;
-    --railway)    PLATFORM="railway"; shift ;;
-    --fly)        PLATFORM="fly"; shift ;;
-    --dry-run)    DRY_RUN=true; shift ;;
-    *)            error "Unknown option: $1"; exit 1 ;;
+    --cloudflare)   PLATFORM="cloudflare"; shift ;;
+    --node)         PLATFORM="node"; shift ;;
+    --lambda)       PLATFORM="lambda"; shift ;;
+    --railway)      PLATFORM="railway"; shift ;;
+    --fly)          PLATFORM="fly"; shift ;;
+    --multi-tenant) MULTI_TENANT=true; shift ;;
+    --dry-run)      DRY_RUN=true; shift ;;
+    *)              error "Unknown option: $1"; exit 1 ;;
   esac
 done
 
@@ -82,6 +85,17 @@ write_file() {
     cat > /dev/null
   else
     cat > "$dest"
+  fi
+}
+
+# Reads heredoc content from stdin; appends it to an existing generated file.
+append_file() {
+  local dest="$1"
+  if $DRY_RUN; then
+    dryrun "Would append to: $dest"
+    cat > /dev/null
+  else
+    cat >> "$dest"
   fi
 }
 
@@ -212,7 +226,25 @@ else
   run_cmd pnpm add @hono/node-server
 fi
 
-write_file "$API_DIR/drizzle.config.ts" << 'DEOF'
+if $MULTI_TENANT; then
+  write_file "$API_DIR/drizzle.config.ts" << 'DEOF'
+import { defineConfig } from 'drizzle-kit';
+
+export default defineConfig({
+  // Tenancy tables (tenants registry + tenant-scoped resources) live in
+  // src/tenancy/schema.ts alongside the base schema.
+  schema: ['./src/db/schema.ts', './src/tenancy/schema.ts'],
+  out: './src/db/migrations',
+  dialect: 'postgresql',
+  dbCredentials: {
+    url: process.env.DATABASE_URL!,
+  },
+  verbose: true,
+  strict: true,
+});
+DEOF
+else
+  write_file "$API_DIR/drizzle.config.ts" << 'DEOF'
 import { defineConfig } from 'drizzle-kit';
 
 export default defineConfig({
@@ -226,6 +258,7 @@ export default defineConfig({
   strict: true,
 });
 DEOF
+fi
 
 copy_file "$TEMPLATES_DIR/snippets/shared/src/db/schema.ts" "$API_DIR/src/db/schema.ts"
 copy_file "$TEMPLATES_DIR/snippets/shared/src/db/client.ts" "$API_DIR/src/db/client.ts"
@@ -385,6 +418,47 @@ JWT_SECRET=dev-secret-change-me-in-production-min-32-chars
 ENVEOF
 
   success "Node.js / Docker configured."
+fi
+
+# ---- Multi-tenancy (optional) ----
+if $MULTI_TENANT; then
+  step "Setting up multi-tenancy..."
+
+  make_dirs "$API_DIR/src/tenancy"
+  copy_file "$TEMPLATES_DIR/snippets/shared/src/tenancy/config.ts"       "$API_DIR/src/tenancy/config.ts"
+  copy_file "$TEMPLATES_DIR/snippets/shared/src/tenancy/schema.ts"       "$API_DIR/src/tenancy/schema.ts"
+  copy_file "$TEMPLATES_DIR/snippets/shared/src/tenancy/middleware.ts"   "$API_DIR/src/tenancy/middleware.ts"
+  copy_file "$TEMPLATES_DIR/snippets/shared/src/tenancy/row-scope.ts"    "$API_DIR/src/tenancy/row-scope.ts"
+  copy_file "$TEMPLATES_DIR/snippets/shared/src/tenancy/schema-scope.ts" "$API_DIR/src/tenancy/schema-scope.ts"
+
+  # RLS policies ship as a SQL template to paste into a custom Drizzle
+  # migration (pnpm drizzle-kit generate --custom --name enable-rls).
+  copy_file "$TEMPLATES_DIR/multi-tenant/rls-policies.sql" "$API_DIR/src/db/rls-policies.sql"
+
+  # Tenant-isolation tests: resolution + query scoping run everywhere; the
+  # live RLS/search_path suite activates when TENANCY_TEST_DATABASE_URL is set.
+  copy_file "$TEMPLATES_DIR/snippets/shared/tests/tenancy.test.ts" "$API_DIR/tests/tenancy.test.ts"
+
+  if [[ "$PLATFORM" == "cloudflare" ]]; then
+    ENV_EXAMPLE_FILE=".dev.vars.example"
+  else
+    ENV_EXAMPLE_FILE=".env.example"
+  fi
+  append_file "$API_DIR/$ENV_EXAMPLE_FILE" << 'MTENVEOF'
+
+# --- Multi-tenancy ---
+# Isolation strategy: row (shared tables + tenant_id + RLS, the default) or
+# schema (one PostgreSQL schema per tenant). See src/tenancy/config.ts.
+TENANCY_STRATEGY=row
+# Base domain for subdomain tenant resolution (acme.api.example.com -> acme).
+# Remove or leave unset to disable the subdomain source.
+TENANCY_BASE_DOMAIN=api.example.com
+# Optional overrides (defaults shown):
+# TENANCY_HEADER_NAME=X-Tenant-ID
+# TENANCY_JWT_CLAIM=tenant_id
+MTENVEOF
+
+  success "Multi-tenancy configured (src/tenancy/, strategy '${CYAN}row${NC}' by default)."
 fi
 
 # ---- Postman collection ----
@@ -760,6 +834,68 @@ but the production image prunes dev dependencies (no drizzle-kit), so the
 proxy approach is the default -- see the comments in `fly.toml`.
 READMEFLY
   fi
+  if $MULTI_TENANT; then
+    cat << 'READMEMT'
+
+## Multi-tenancy
+
+This project was generated with `--multi-tenant`. Tenant isolation lives in
+`api/src/tenancy/`:
+
+| File | Purpose |
+|------|---------|
+| `config.ts` | Strategy selection (`TENANCY_STRATEGY=row\|schema`) + resolution settings |
+| `schema.ts` | `tenants` registry table, `tenantScopedColumns()` helper, example scoped table |
+| `middleware.ts` | Resolves the tenant per request from JWT claim, subdomain, or `X-Tenant-ID` header |
+| `row-scope.ts` | Row strategy: tenant-filtered query facade + `withTenant()` RLS transaction helper |
+| `schema-scope.ts` | Schema strategy: per-tenant schema creation + `search_path` transaction helper |
+
+Two isolation strategies are supported, selected via `TENANCY_STRATEGY` in the
+environment:
+
+- **row** (default): all tenants share tables; every tenant-scoped table has a
+  `tenant_id` column, every query is filtered by it, and PostgreSQL Row Level
+  Security (`api/src/db/rls-policies.sql`) enforces the boundary in the
+  database even if a query forgets the filter. Apply the policies with a
+  custom migration: `pnpm drizzle-kit generate --custom --name enable-rls`,
+  paste the SQL in, then `pnpm drizzle-kit migrate`.
+- **schema**: each tenant gets its own PostgreSQL schema; queries run inside
+  `withTenantSchema()`, which points `search_path` at the tenant's schema for
+  the duration of a transaction.
+
+Wire the resolver into the app and scope every query:
+
+```typescript
+import { tenantResolver, getTenant } from './tenancy/middleware';
+import { createTenantDb } from './tenancy/row-scope';
+import { tenants, projects, type Tenant } from './tenancy/schema';
+
+app.use('/api/*', tenantResolver({
+  baseDomain: config.TENANCY_BASE_DOMAIN,
+  lookupTenant: async (ref) =>
+    db.query.tenants.findFirst({
+      where: ref.source === 'subdomain'
+        ? eq(tenants.slug, ref.value)
+        : eq(tenants.id, ref.value),
+    }),
+}));
+
+app.get('/api/projects', async (c) => {
+  const tenant = getTenant<Tenant>(c);
+  const tdb = createTenantDb(db, tenant.id);
+  return c.json(await tdb.findMany(projects));
+});
+```
+
+`api/tests/tenancy.test.ts` covers tenant resolution and query scoping out of
+the box; set `TENANCY_TEST_DATABASE_URL` to also run the live PostgreSQL
+suite that proves RLS and `search_path` isolation end to end.
+
+The trade-offs between the two strategies (and when to pick which) are
+documented in the Nerva framework repo under
+`docs/api-development/multi-tenancy.md`.
+READMEMT
+  fi
   cat << 'READMESTATIC'
 
 ## Postman
@@ -817,6 +953,9 @@ echo -e "${GREEN}============================================${NC}"
 echo ""
 echo -e "  Name:      ${CYAN}$PROJECT_NAME${NC}"
 echo -e "  Platform:  ${CYAN}$PLATFORM${NC}"
+if $MULTI_TENANT; then
+  echo -e "  Tenancy:   ${CYAN}multi-tenant${NC} (row strategy default; see api/src/tenancy/)"
+fi
 echo -e "  Location:  ${CYAN}$API_DIR${NC}"
 echo ""
 if ! $DRY_RUN; then

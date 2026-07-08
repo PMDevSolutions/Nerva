@@ -166,7 +166,7 @@ jobs:
             fi
           done
 
-          for dir in templates/shared templates/cloudflare-workers templates/node-server templates/docker templates/aws-lambda templates/railway templates/fly; do
+          for dir in templates/shared templates/cloudflare-workers templates/node-server templates/docker templates/aws-lambda templates/railway templates/fly templates/multi-tenant; do
             if [ -d "$dir" ]; then
               echo "  $dir: OK"
             else
@@ -236,13 +236,21 @@ jobs:
   # freshly generated projects (e.g. the TypeScript 6 @types auto-include
   # removal, #119) fails here instead of only on user machines.
   generated-projects:
-    name: Generate & Type-check (${{ matrix.platform }})
+    name: Generate & Type-check (${{ matrix.label }})
     runs-on: ubuntu-latest
     timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
-        platform: [cloudflare, node, lambda, railway, fly]
+        include:
+          - { platform: cloudflare, label: cloudflare }
+          - { platform: node, label: node }
+          - { platform: lambda, label: lambda }
+          - { platform: railway, label: railway }
+          - { platform: fly, label: fly }
+          # Multi-tenant variant: also runs the tenant-isolation tests, since
+          # the tenancy scaffolding ships its own test suite.
+          - { platform: node, label: node-multi-tenant, flags: --multi-tenant }
     steps:
       - uses: actions/checkout@v7
 
@@ -253,11 +261,16 @@ jobs:
       - run: corepack enable
 
       - name: Generate project
-        run: ./scripts/setup-project.sh demo-${{ matrix.platform }} --${{ matrix.platform }}
+        run: ./scripts/setup-project.sh demo-${{ matrix.label }} --${{ matrix.platform }} ${{ matrix.flags }}
 
       - name: Type-check generated project
         run: pnpm typecheck
-        working-directory: demo-${{ matrix.platform }}/api
+        working-directory: demo-${{ matrix.label }}/api
+
+      - name: Run tenant-isolation tests
+        if: matrix.flags == '--multi-tenant'
+        run: pnpm test
+        working-directory: demo-${{ matrix.label }}/api
 
   check-links:
     name: Check Markdown Links
