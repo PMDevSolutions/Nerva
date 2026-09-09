@@ -52,11 +52,30 @@ The following scripts are used throughout development. Run them before submittin
 
 | Script | Purpose |
 |--------|---------|
-| `./scripts/run-tests.sh` | Run the full Vitest test suite with coverage |
+| `pnpm verify` | Run every framework-level check in one pass (`scripts/verify-all.sh`) |
+| `pnpm test` | Behavioral tests for the scripts and Claude Code hooks (`scripts/__tests__/`) |
+| `./scripts/run-tests.sh` | Run a generated API project's Vitest suite with coverage |
 | `./scripts/check-types.sh` | TypeScript type checking (strict mode) |
 | `./scripts/security-scan.sh` | Security audit for dependency vulnerabilities |
 
 All checks must pass before a pull request will be reviewed.
+
+### Testing the scripts themselves
+
+The automation scripts are production tooling, so they have their own test
+suite. Each test in `scripts/__tests__/` shells out to the real script against
+a throwaway project directory, with fake `pnpm`, `npx`, or `k6` shims on `PATH`
+so nothing touches the network. Run it locally with:
+
+```bash
+pnpm test                                        # whole suite
+pnpm test -- scripts/__tests__/security-scan.test.js   # one file
+pnpm test:watch                                  # watch mode
+```
+
+CI runs the same suite in the `script-tests` job. When you change a script,
+add or update its test file; `scripts/README.md` describes each script's flags,
+exit codes, and the `pipeline.config.json` keys it reads.
 
 ---
 
@@ -108,7 +127,8 @@ Branch names should be lowercase, use hyphens as separators, and be descriptive 
 3. **Run all checks locally** before pushing:
 
    ```bash
-   ./scripts/run-tests.sh
+   pnpm verify              # framework checks, including the script tests
+   ./scripts/run-tests.sh   # plus, when you changed generated-project code:
    ./scripts/check-types.sh
    ./scripts/security-scan.sh
    ```
