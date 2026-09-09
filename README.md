@@ -107,13 +107,14 @@ project-root/
 │   │   ├── unit/           # Service unit tests
 │   │   └── fixtures/       # Test data factories
 │   └── package.json
-├── scripts/                # Automation scripts (9 total)
+├── scripts/                # Automation scripts (14 total)
 ├── templates/              # Starter configs
 ├── docs/                   # Documentation
 ├── .claude/                # Claude Code configuration
 │   ├── agents/             # 24 custom agents
 │   ├── skills/             # 12 development skills
 │   ├── commands/           # Slash commands
+│   ├── hooks/              # Claude Code hooks (secret guard, prod-DB guard, reminders)
 │   └── pipeline.config.json
 ├── CLAUDE.md               # Claude Code project instructions
 └── README.md               # This file
@@ -171,6 +172,11 @@ Full catalog: [`.claude/CUSTOM-AGENTS-GUIDE.md`](.claude/CUSTOM-AGENTS-GUIDE.md)
 ./scripts/load-test.sh --vus 50 --duration 30s  # Load test
 ./scripts/generate-openapi-docs.sh              # OpenAPI docs
 ./scripts/generate-client.sh --spec docs/openapi.yaml  # Typed client
+./scripts/verify-all.sh                         # Every local check in one run
+node scripts/validate-pipeline-config.js        # pipeline.config.json vs schema
+./scripts/check-doc-counts.sh                   # Doc counts vs disk
+./scripts/check-prerequisites.sh                # Tooling report
+node scripts/check-destructive-migrations.js    # Destructive-DDL guard
 ```
 
 ## Templates

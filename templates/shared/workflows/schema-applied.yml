@@ -1,0 +1,127 @@
+name: Schema applied (strict)
+
+# The post-deploy counterpart to schema-drift.yml.
+#
+# schema-drift.yml is the PR gate and tolerates drift that a committed
+# migration would resolve, because the migration ships in the same PR. That
+# tolerance has a blind spot: a migration can merge and then never be applied
+# to production, and the lenient check cannot tell that apart from "already
+# applied". This workflow runs the same check in --strict mode, where a
+# covering migration does NOT excuse drift: if production is missing anything
+# declared in api/src/db/schema.ts, it fails.
+#
+# It runs daily and on demand (workflow_dispatch), not on push: right after a
+# schema PR merges, production legitimately lags until the deploy applies the
+# migration, so a per-push strict run would be red by design.
+#
+# On failure it opens (or comments on) a single tracking issue labeled
+# `schema-drift`; on success it closes any open tracking issue, so the alert
+# self-heals once production is reconciled.
+#
+# Requires the PROD_DATABASE_URL repository secret (read-only is enough).
+# Without it the run prints a notice and exits green rather than failing.
+
+on:
+  schedule:
+    # 13:00 UTC daily, after typical deploy windows.
+    - cron: "0 13 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    name: Assert production has every declared schema object
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: api
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check PROD_DATABASE_URL secret
+        id: prod
+        env:
+          PROD_DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+        run: |
+          if [ -z "$PROD_DATABASE_URL" ]; then
+            echo "::notice title=Strict schema check skipped::The PROD_DATABASE_URL secret is not set. Add a read-only production connection string under Settings > Secrets and variables > Actions to enable the daily strict drift gate."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install pnpm
+        if: steps.prod.outputs.configured == 'true'
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        if: steps.prod.outputs.configured == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: api/pnpm-lock.yaml
+
+      - name: Install dependencies
+        if: steps.prod.outputs.configured == 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Run drift check (strict)
+        if: steps.prod.outputs.configured == 'true'
+        env:
+          PROD_DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+        run: pnpm db:check-drift:strict
+
+      - name: Open or update the drift alert issue
+        if: failure() && steps.prod.outputs.configured == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const TITLE = "Production schema drift: strict gate failing";
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const body = [
+              "The scheduled **strict** schema check failed.",
+              "",
+              "Production is missing something declared in `api/src/db/schema.ts`. The most common cause is a migration that merged but was never applied to production.",
+              "",
+              `- Failing run: ${runUrl}`,
+              "- Verify locally: `PROD_DATABASE_URL=... pnpm db:check-drift:strict` (from `api/`)",
+              "- Fix: apply the pending migration to production (`pnpm db:migrate` with `DATABASE_URL` pointed at production), then re-run this workflow.",
+              "",
+              "This issue closes automatically when a later run passes.",
+            ].join("\n");
+            const { owner, repo } = context.repo;
+            const open = await github.paginate(github.rest.issues.listForRepo, {
+              owner, repo, state: "open", labels: "schema-drift", per_page: 100,
+            });
+            if (open.length > 0) {
+              await github.rest.issues.createComment({ owner, repo, issue_number: open[0].number, body });
+            } else {
+              await github.rest.issues.create({ owner, repo, title: TITLE, body, labels: ["schema-drift"] });
+            }
+
+      - name: Close the drift alert issue
+        if: success() && steps.prod.outputs.configured == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const runUrl = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
+            const open = await github.paginate(github.rest.issues.listForRepo, {
+              owner, repo, state: "open", labels: "schema-drift", per_page: 100,
+            });
+            for (const issue of open) {
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: issue.number,
+                body: `Strict schema check is green again; production matches the declared schema. Closing. (run ${runUrl})`,
+              });
+              await github.rest.issues.update({ owner, repo, issue_number: issue.number, state: "closed" });
+            }

@@ -12,7 +12,15 @@
     "release:dry": "commit-and-tag-version --dry-run",
     "release:first": "commit-and-tag-version --first-release",
     "setup": "bash scripts/setup-project.sh",
-    "prepare": "husky"
+    "prepare": "husky",
+    "test": "vitest run --config scripts/__tests__/vitest.config.js",
+    "test:watch": "vitest --config scripts/__tests__/vitest.config.js",
+    "verify": "bash scripts/verify-all.sh",
+    "verify:ci": "bash scripts/verify-all.sh --ci",
+    "validate:config": "node scripts/validate-pipeline-config.js",
+    "check:prereqs": "bash scripts/check-prerequisites.sh",
+    "check:doc-counts": "bash scripts/check-doc-counts.sh",
+    "check:destructive": "node scripts/check-destructive-migrations.js"
   },
   "repository": {
     "type": "git",
@@ -45,7 +53,9 @@
   "devDependencies": {
     "@commitlint/cli": "^21.2.2",
     "@commitlint/config-conventional": "^21.2.2",
+    "ajv": "^8.20.0",
     "commit-and-tag-version": "^13.1.2",
-    "husky": "^9.1.7"
+    "husky": "^9.1.7",
+    "vitest": "^4.1.2"
   }
 }

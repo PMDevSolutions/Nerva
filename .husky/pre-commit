@@ -1,13 +1,30 @@
-# Validate shell script syntax
-for f in scripts/*.sh; do
+# Validate shell script syntax (scripts, shared lib, Claude Code hooks)
+for f in scripts/*.sh scripts/lib/*.sh .claude/hooks/*.sh .claude/hooks/lib/*.sh; do
   if [ -f "$f" ]; then
     bash -n "$f" || exit 1
   fi
 done
 
+# Validate JS script syntax
+for f in scripts/*.js scripts/lib/*.js; do
+  if [ -f "$f" ]; then
+    node --check "$f" || exit 1
+  fi
+done
+
 # Validate JSON configs
-for f in .claude/pipeline.config.json package.json; do
+for f in .claude/pipeline.config.json .claude/pipeline.config.schema.json .claude/settings.json package.json; do
   if [ -f "$f" ]; then
     node -e "JSON.parse(require('fs').readFileSync('$f','utf8'))" || exit 1
   fi
 done
+
+# Validate pipeline.config.json against its schema (structural checks included)
+if [ -f scripts/validate-pipeline-config.js ]; then
+  node scripts/validate-pipeline-config.js || exit 1
+fi
+
+# Flag drift between documented agent/skill/script counts and what is on disk
+if [ -f scripts/check-doc-counts.sh ]; then
+  bash scripts/check-doc-counts.sh || exit 1
+fi

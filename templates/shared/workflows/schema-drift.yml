@@ -1,0 +1,83 @@
+name: Schema drift
+
+# PR gate for the database schema.
+#
+# 1. Destructive migration guard (no database needed): fails the PR if a
+#    committed migration in api/src/db/migrations contains DROP/TRUNCATE/etc.
+#    unless the file is allowlisted with `-- nerva:allow-destructive: <reason>`.
+#
+# 2. Lenient drift check (needs PROD_DATABASE_URL): asserts every table,
+#    column, NOT NULL constraint, and enum declared in api/src/db/schema.ts
+#    exists in production, tolerating drift that a migration in this PR will
+#    resolve. This stops app code merging ahead of the schema change it needs.
+#
+# Configure the PROD_DATABASE_URL repository secret (Settings > Secrets and
+# variables > Actions) with a READ-ONLY connection string to enable step 2.
+# Without the secret the drift step is skipped with a notice, not a failure.
+# See docs/api-development/migration-safety.md in the Nerva framework repo.
+
+on:
+  pull_request:
+    paths:
+      - "api/src/db/**"
+      - "api/scripts/check-destructive-migrations.mjs"
+      - ".github/workflows/schema-drift.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: schema-drift-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Migration guard + prod drift check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: api
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: api/pnpm-lock.yaml
+
+      # Pure static scan; the script has no dependencies, so it runs before
+      # (and independently of) pnpm install.
+      - name: Check migrations for destructive DDL
+        run: node scripts/check-destructive-migrations.mjs
+
+      - name: Check PROD_DATABASE_URL secret
+        id: prod
+        env:
+          PROD_DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+        run: |
+          if [ -z "$PROD_DATABASE_URL" ]; then
+            echo "::notice title=Schema drift check skipped::The PROD_DATABASE_URL secret is not set. Add a read-only production connection string under Settings > Secrets and variables > Actions to enable the drift gate."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install dependencies
+        if: steps.prod.outputs.configured == 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Run drift check (lenient)
+        if: steps.prod.outputs.configured == 'true'
+        env:
+          PROD_DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+        run: pnpm db:check-drift

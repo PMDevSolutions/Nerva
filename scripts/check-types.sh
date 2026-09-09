@@ -6,21 +6,10 @@ set -euo pipefail
 # Usage: ./scripts/check-types.sh [--strict] [--verbose]
 # ============================================================================
 
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-CYAN='\033[0;36m'
-NC='\033[0m'
-
-info()    { echo -e "${BLUE}[INFO]${NC} $*"; }
-success() { echo -e "${GREEN}[OK]${NC} $*"; }
-warn()    { echo -e "${YELLOW}[WARN]${NC} $*"; }
-error()   { echo -e "${RED}[ERROR]${NC} $*" >&2; }
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-API_DIR="$PROJECT_ROOT/api"
+# shellcheck source=lib/common.sh
+source "$SCRIPT_DIR/lib/common.sh"
+API_DIR="$(common_api_dir)"
 
 VERBOSE=false
 EXTRA_ARGS=()
@@ -72,6 +61,17 @@ if "${TSC_CMD[@]}"; then
   DURATION=$((END_TIME - START_TIME))
   echo ""
   success "Type check passed in ${DURATION}s. No type errors found."
+
+  # Advisory: qualityGate.noAnyTypes in .claude/pipeline.config.json.
+  if [[ "$(common_config_get 'qualityGate.noAnyTypes' true)" == true && -d src ]]; then
+    ANY_HITS=$(grep -rnE '(:\s*any\b|<any>|as any\b)' src --include='*.ts' 2>/dev/null | grep -v '\.test\.' | grep -v '\.spec\.' || true)
+    if [[ -n "$ANY_HITS" ]]; then
+      ANY_COUNT=$(printf '%s\n' "$ANY_HITS" | wc -l | tr -d ' ')
+      warn "qualityGate.noAnyTypes is on and $ANY_COUNT use(s) of 'any' were found in src/:"
+      printf '%s\n' "$ANY_HITS" | head -10 | sed 's/^/    /'
+      [[ "$ANY_COUNT" -gt 10 ]] && echo "    ..."
+    fi
+  fi
 else
   END_TIME=$(date +%s)
   DURATION=$((END_TIME - START_TIME))

@@ -3,24 +3,16 @@ set -euo pipefail
 
 # ============================================================================
 # security-scan.sh - Security scanning for Nerva API projects
-# Usage: ./scripts/security-scan.sh [--json] [--audit-only] [--patterns-only]
+# Usage: ./scripts/security-scan.sh [--json] [--audit-only] [--patterns-only] [--level <low|moderate|high|critical>] [--no-fail]
+#
+# Audit level, fail-on-vulnerability and lockfile policy come from
+# security.audit.* in .claude/pipeline.config.json; flags override.
 # ============================================================================
 
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-CYAN='\033[0;36m'
-NC='\033[0m'
-
-info()    { echo -e "${BLUE}[INFO]${NC} $*"; }
-success() { echo -e "${GREEN}[OK]${NC} $*"; }
-warn()    { echo -e "${YELLOW}[WARN]${NC} $*"; }
-error()   { echo -e "${RED}[ERROR]${NC} $*" >&2; }
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-API_DIR="$PROJECT_ROOT/api"
+# shellcheck source=lib/common.sh
+source "$SCRIPT_DIR/lib/common.sh"
+API_DIR="$(common_api_dir)"
 
 OUTPUT_JSON=false
 AUDIT_ONLY=false
@@ -28,11 +20,18 @@ PATTERNS_ONLY=false
 ISSUES_FOUND=0
 JSON_RESULTS=()
 
+# Policy from .claude/pipeline.config.json (security.audit.*); flags override.
+AUDIT_LEVEL="$(common_config_get 'security.audit.level' moderate)"
+FAIL_ON_VULN="$(common_config_get 'security.audit.failOnVulnerability' true)"
+CHECK_LOCKFILE="$(common_config_get 'security.audit.checkLockfile' true)"
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --json)          OUTPUT_JSON=true; shift ;;
     --audit-only)    AUDIT_ONLY=true; shift ;;
     --patterns-only) PATTERNS_ONLY=true; shift ;;
+    --level)         AUDIT_LEVEL="$2"; shift 2 ;;
+    --no-fail)       FAIL_ON_VULN=false; shift ;;
     *)               error "Unknown option: $1"; exit 1 ;;
   esac
 done
@@ -62,14 +61,18 @@ add_issue() {
 }
 
 run_audit() {
-  info "Running pnpm audit for known vulnerabilities..."
+  info "Running pnpm audit for known vulnerabilities (level: $AUDIT_LEVEL)..."
   echo ""
-  if ! command -v pnpm &>/dev/null; then
+  if ! have_cmd pnpm; then
     error "pnpm is not installed."
     return 1
   fi
 
-  AUDIT_OUTPUT=$(pnpm audit 2>&1) || true
+  if [[ "$CHECK_LOCKFILE" == true && ! -f "pnpm-lock.yaml" ]]; then
+    add_issue "medium" "lockfile" "pnpm-lock.yaml is missing; dependency versions are not pinned (security.audit.checkLockfile)"
+  fi
+
+  AUDIT_OUTPUT=$(pnpm audit --audit-level "$AUDIT_LEVEL" 2>&1) || true
 
   if echo "$AUDIT_OUTPUT" | grep -q "No known vulnerabilities found"; then
     success "No known vulnerabilities in dependencies."
@@ -176,4 +179,10 @@ else
   echo -e "${CYAN}============================================${NC}"
 fi
 
-[[ "$ISSUES_FOUND" -gt 0 ]] && exit 1 || exit 0
+if [[ "$ISSUES_FOUND" -gt 0 ]]; then
+  if [[ "$FAIL_ON_VULN" == true ]]; then
+    exit 1
+  fi
+  warn "Issues found but security.audit.failOnVulnerability is false (or --no-fail); exiting 0."
+fi
+exit 0

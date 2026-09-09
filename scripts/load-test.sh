@@ -4,26 +4,22 @@ set -euo pipefail
 # ============================================================================
 # load-test.sh - Run k6 load tests
 # Usage: ./scripts/load-test.sh [--vus 50] [--duration 30s] [--script path]
+#
+# VU count, duration and k6 thresholds default to testing.* in
+# .claude/pipeline.config.json.
 # ============================================================================
 
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-CYAN='\033[0;36m'
-NC='\033[0m'
-
-info()    { echo -e "${BLUE}[INFO]${NC} $*"; }
-success() { echo -e "${GREEN}[OK]${NC} $*"; }
-warn()    { echo -e "${YELLOW}[WARN]${NC} $*"; }
-error()   { echo -e "${RED}[ERROR]${NC} $*" >&2; }
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-API_DIR="$PROJECT_ROOT/api"
+# shellcheck source=lib/common.sh
+source "$SCRIPT_DIR/lib/common.sh"
+API_DIR="$(common_api_dir)"
 
-VUS=10
-DURATION="30s"
+# Defaults from testing.* in .claude/pipeline.config.json; flags override.
+VUS="$(common_config_get 'testing.loadTestVUs' 10)"
+DURATION="$(common_config_get 'testing.loadTestDuration' 30s)"
+P95_MS="$(common_config_get 'testing.loadTestThresholds.http_req_duration_p95' 500)"
+P99_MS="$(common_config_get 'testing.loadTestThresholds.http_req_duration_p99' 1000)"
+FAIL_RATE="$(common_config_get 'testing.loadTestThresholds.http_req_failed_rate' 0.01)"
 K6_SCRIPT=""
 BASE_URL="http://localhost:3000"
 OUTPUT_JSON=false
@@ -41,7 +37,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if ! command -v k6 &>/dev/null; then
+if ! have_cmd k6; then
   error "k6 is not installed."
   echo ""
   echo "  Install k6:"
@@ -58,7 +54,7 @@ fi
 if [[ ! -f "$K6_SCRIPT" ]]; then
   warn "Load test script not found. Creating default baseline..."
   mkdir -p "$(dirname "$K6_SCRIPT")"
-  cat > "$K6_SCRIPT" << 'K6EOF'
+  cat > "$K6_SCRIPT" << K6EOF
 import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { Rate, Trend } from 'k6/metrics';
@@ -71,14 +67,14 @@ export const options = {
   vus: __ENV.VUS ? parseInt(__ENV.VUS) : 10,
   duration: __ENV.DURATION || '30s',
   thresholds: {
-    http_req_duration: ['p(95)<500', 'p(99)<1000'],
-    errors: ['rate<0.01'],
-    http_req_failed: ['rate<0.01'],
+    http_req_duration: ['p(95)<${P95_MS}', 'p(99)<${P99_MS}'],
+    errors: ['rate<${FAIL_RATE}'],
+    http_req_failed: ['rate<${FAIL_RATE}'],
   },
 };
 
 export default function () {
-  const healthRes = http.get(`${BASE_URL}/health`);
+  const healthRes = http.get(\`\${BASE_URL}/health\`);
   check(healthRes, {
     'health status 200': (r) => r.status === 200,
     'health response < 200ms': (r) => r.timings.duration < 200,
@@ -86,7 +82,7 @@ export default function () {
   errorRate.add(healthRes.status !== 200);
   responseTime.add(healthRes.timings.duration);
 
-  const rootRes = http.get(`${BASE_URL}/`);
+  const rootRes = http.get(\`\${BASE_URL}/\`);
   check(rootRes, {
     'root status 200': (r) => r.status === 200,
     'root response < 300ms': (r) => r.timings.duration < 300,

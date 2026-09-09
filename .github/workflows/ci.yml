@@ -21,12 +21,27 @@ jobs:
       - name: Check shell script syntax
         run: |
           errors=0
-          for f in scripts/*.sh; do
+          count=0
+          for f in scripts/*.sh scripts/lib/*.sh .claude/hooks/*.sh .claude/hooks/lib/*.sh; do
             if [ -f "$f" ]; then
+              count=$((count + 1))
               bash -n "$f" || { echo "FAIL: $f"; errors=$((errors + 1)); }
             fi
           done
-          echo "Checked $(ls scripts/*.sh 2>/dev/null | wc -l) scripts, $errors failed"
+          echo "Checked $count shell files, $errors failed"
+          exit $errors
+
+      - name: Check JS script syntax
+        run: |
+          errors=0
+          count=0
+          for f in scripts/*.js scripts/lib/*.js; do
+            if [ -f "$f" ]; then
+              count=$((count + 1))
+              node --check "$f" || { echo "FAIL: $f"; errors=$((errors + 1)); }
+            fi
+          done
+          echo "Checked $count JS files, $errors failed"
           exit $errors
 
       - name: Run ShellCheck
@@ -35,10 +50,16 @@ jobs:
           scandir: './scripts'
           severity: warning
 
+      - name: Run ShellCheck on hooks
+        uses: ludeeus/action-shellcheck@master
+        with:
+          scandir: './.claude/hooks'
+          severity: warning
+
       - name: Validate JSON configs
         run: |
           errors=0
-          for f in .claude/pipeline.config.json package.json; do
+          for f in .claude/pipeline.config.json .claude/pipeline.config.schema.json .claude/settings.json package.json; do
             if [ -f "$f" ]; then
               python3 -m json.tool "$f" > /dev/null || { echo "FAIL: $f"; errors=$((errors + 1)); }
             fi
@@ -82,6 +103,14 @@ jobs:
             "scripts/check-types.sh"
             "scripts/security-scan.sh"
             "scripts/generate-migration.sh"
+            "scripts/check-destructive-migrations.js"
+            "scripts/check-doc-counts.sh"
+            "scripts/check-prerequisites.sh"
+            "scripts/validate-pipeline-config.js"
+            "scripts/verify-all.sh"
+            "scripts/lib/common.sh"
+            ".claude/pipeline.config.schema.json"
+            ".claude/settings.json"
           )
           for f in "${required_files[@]}"; do
             if [ -f "$f" ]; then
@@ -177,6 +206,35 @@ jobs:
 
           echo "$errors template validation failures"
           exit $errors
+
+  # ── Script tests, config schema, doc-count drift (needs Node + deps) ─────
+  script-tests:
+    name: Script Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Validate pipeline.config.json against schema
+        run: node scripts/validate-pipeline-config.js
+
+      - name: Check doc counts match agents/skills/scripts on disk
+        run: bash scripts/check-doc-counts.sh
+
+      - name: Prerequisites check (output contract smoke test)
+        run: bash scripts/check-prerequisites.sh || true
+
+      - name: Run script and hook tests
+        run: pnpm test -- --reporter=verbose
 
   node-compat:
     name: Node.js ${{ matrix.node-version }} Compatibility
