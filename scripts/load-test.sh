@@ -133,7 +133,9 @@ if "${K6_CMD[@]}"; then
   DUR=$((END_TIME - START_TIME))
   echo ""
   success "Load test completed in ${DUR}s."
-  [[ "$OUTPUT_JSON" == true ]] && info "Results: $REPORT_FILE"
+  if [[ "$OUTPUT_JSON" == true ]]; then
+    info "Results: $REPORT_FILE"
+  fi
 else
   END_TIME=$(date +%s)
   DUR=$((END_TIME - START_TIME))

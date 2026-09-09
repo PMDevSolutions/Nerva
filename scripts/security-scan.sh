@@ -56,7 +56,9 @@ add_issue() {
       medium)   echo -e "  ${YELLOW}[MEDIUM]${NC} $message" ;;
       low)      echo -e "  ${BLUE}[LOW]${NC} $message" ;;
     esac
-    [[ -n "$file" ]] && echo -e "    File: $file${line:+:$line}"
+    if [[ -n "$file" ]]; then
+      echo -e "    File: $file${line:+:$line}"
+    fi
   fi
 }
 
@@ -150,7 +152,7 @@ run_pattern_scan() {
 
   # Console.log
   info "Checking for console.log statements..."
-  LOG_COUNT=$(grep -rn "console\.log" "$SRC_DIR" --include="*.ts" 2>/dev/null | grep -v node_modules | grep -v ".test." | grep -v ".spec." | wc -l || true)
+  LOG_COUNT=$(grep -rn "console\.log" "$SRC_DIR" --include="*.ts" 2>/dev/null | grep -v node_modules | grep -v ".test." | grep -v ".spec." | wc -l | tr -d ' ' || true)
   [[ "$LOG_COUNT" -gt 0 ]] && add_issue "low" "logging" "Found $LOG_COUNT console.log statement(s) - use structured logger"
 
   echo ""
@@ -166,7 +168,8 @@ echo ""
 [[ "$AUDIT_ONLY" == false ]] && run_pattern_scan
 
 if [[ "$OUTPUT_JSON" == true ]]; then
-  JOINED=$(IFS=,; echo "${JSON_RESULTS[*]}")
+  # ${arr[*]+...} keeps an empty array from tripping set -u on bash 3.2 (macOS).
+  JOINED=$(IFS=,; echo "${JSON_RESULTS[*]+"${JSON_RESULTS[*]}"}")
   echo "{\"scan_date\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"issues_count\":$ISSUES_FOUND,\"issues\":[$JOINED]}"
 else
   echo -e "${CYAN}============================================${NC}"

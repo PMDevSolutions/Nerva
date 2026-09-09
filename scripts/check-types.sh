@@ -69,7 +69,9 @@ if "${TSC_CMD[@]}"; then
       ANY_COUNT=$(printf '%s\n' "$ANY_HITS" | wc -l | tr -d ' ')
       warn "qualityGate.noAnyTypes is on and $ANY_COUNT use(s) of 'any' were found in src/:"
       printf '%s\n' "$ANY_HITS" | head -10 | sed 's/^/    /'
-      [[ "$ANY_COUNT" -gt 10 ]] && echo "    ..."
+      if [[ "$ANY_COUNT" -gt 10 ]]; then
+        echo "    ..."
+      fi
     fi
   fi
 else
