@@ -3,35 +3,53 @@ set -euo pipefail
 
 # ============================================================================
 # generate-migration.sh - Generate a Drizzle ORM migration
-# Usage: ./scripts/generate-migration.sh [migration-name]
+# Usage: ./scripts/generate-migration.sh [migration-name] [--apply]
+#
+# After drizzle-kit generate succeeds, the new migrations are scanned for
+# destructive DDL (scripts/check-destructive-migrations.js). When
+# database.blockDestructiveMigrations is true in .claude/pipeline.config.json
+# (the default), findings block the apply step; allowlist a reviewed
+# migration with a header comment: -- nerva:allow-destructive: <reason>
 # ============================================================================
 
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-CYAN='\033[0;36m'
-NC='\033[0m'
-
-info()    { echo -e "${BLUE}[INFO]${NC} $*"; }
-success() { echo -e "${GREEN}[OK]${NC} $*"; }
-warn()    { echo -e "${YELLOW}[WARN]${NC} $*"; }
-error()   { echo -e "${RED}[ERROR]${NC} $*" >&2; }
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-API_DIR="$PROJECT_ROOT/api"
+# shellcheck source=lib/common.sh
+source "$SCRIPT_DIR/lib/common.sh"
 
-MIGRATION_NAME="${1:-}"
+usage() {
+  cat <<EOF
+Usage: $0 [migration-name] [--apply]
+
+Generate a Drizzle ORM migration for the API project (api/ or \$NERVA_API_DIR).
+
+Options:
+  migration-name  Optional name passed to drizzle-kit generate --name
+  --apply         Apply the migration immediately (skips the interactive prompt)
+  --help, -h      Show this help
+
+The generated SQL is scanned for destructive DDL before it can be applied.
+Allowlist an intended destructive migration with a header comment line:
+  -- nerva:allow-destructive: <reason>
+EOF
+}
+
+MIGRATION_NAME=""
 AUTO_APPLY=false
 
-shift 2>/dev/null || true
+if [[ $# -gt 0 && "$1" != --* ]]; then
+  MIGRATION_NAME="$1"
+  shift
+fi
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --apply) AUTO_APPLY=true; shift ;;
-    *)       error "Unknown option: $1"; exit 1 ;;
+    --apply)     AUTO_APPLY=true; shift ;;
+    --help|-h)   usage; exit 0 ;;
+    *)           error "Unknown option: $1"; usage >&2; exit 1 ;;
   esac
 done
+
+API_DIR="$(common_api_dir)"
 
 if [[ ! -d "$API_DIR" ]]; then
   error "API directory not found at: $API_DIR"
@@ -82,6 +100,49 @@ if [[ -d "$MIGRATIONS_DIR" ]]; then
     echo ""
   fi
 fi
+
+# --- Destructive DDL guard ---------------------------------------------------
+
+DESTRUCTIVE_CHECK="$SCRIPT_DIR/check-destructive-migrations.js"
+if [[ -d "$MIGRATIONS_DIR" && -f "$DESTRUCTIVE_CHECK" ]] && have_cmd node; then
+  step "Checking migrations for destructive DDL..."
+  BLOCK_DESTRUCTIVE="$(common_config_get 'database.blockDestructiveMigrations' true)"
+  CHECK_ARGS=("--dir" "$MIGRATIONS_DIR")
+  if [[ "$BLOCK_DESTRUCTIVE" != "true" ]]; then
+    CHECK_ARGS+=("--warn-only")
+  fi
+
+  set +e
+  node "$DESTRUCTIVE_CHECK" "${CHECK_ARGS[@]}"
+  CHECK_STATUS=$?
+  set -e
+
+  case "$CHECK_STATUS" in
+    0)
+      success "Destructive DDL check passed."
+      ;;
+    1)
+      error "Destructive DDL found in migrations; the migration will NOT be applied."
+      echo "" >&2
+      echo "  If this destructive change is intended and has been reviewed, add a header" >&2
+      echo "  comment line to the migration file and re-run:" >&2
+      echo "" >&2
+      echo "    -- nerva:allow-destructive: <why this destructive change is safe>" >&2
+      echo "" >&2
+      echo "  To report without blocking, set database.blockDestructiveMigrations to" >&2
+      echo "  false in .claude/pipeline.config.json." >&2
+      exit 1
+      ;;
+    *)
+      warn "Destructive DDL check could not run (exit $CHECK_STATUS); continuing."
+      ;;
+  esac
+  echo ""
+else
+  warn "Skipping destructive DDL check (node or $DESTRUCTIVE_CHECK not available)."
+fi
+
+# --- Apply --------------------------------------------------------------------
 
 if [[ "$AUTO_APPLY" == true ]]; then
   info "Auto-apply enabled. Applying migration..."

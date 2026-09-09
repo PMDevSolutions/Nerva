@@ -208,6 +208,8 @@ const result = await db.transaction(async (tx) => {
 });
 ```
 
+See the [migration safety guide](./migration-safety.md) for the destructive-migration guard, the `-- nerva:allow-destructive:` allowlist marker, the production schema drift check, and the two GitHub Actions workflows generated projects ship with.
+
 ## Testing Strategy
 
 ### Unit Tests (Services)
