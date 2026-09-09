@@ -1,0 +1,510 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/PMDevSolutions/Nerva/blob/main/.claude/pipeline.config.schema.json",
+  "title": "Nerva Pipeline Configuration",
+  "description": "Schema for .claude/pipeline.config.json — controls TDD enforcement, database defaults, auth, testing, quality gates, deployment targets, security, API conventions, reporting, and orchestration for the OpenAPI-to-Working-API pipeline.",
+  "type": "object",
+  "required": ["version"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "JSON Schema reference for IDE validation and autocompletion. Should point at ./pipeline.config.schema.json."
+    },
+    "description": {
+      "type": "string",
+      "description": "Human-readable summary of what this config controls."
+    },
+    "version": {
+      "$ref": "#/$defs/semver",
+      "description": "Semantic version of the config document."
+    },
+
+    "tdd": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Test-driven development enforcement for the build pipeline (Phase 2 hard gate).",
+      "properties": {
+        "enforced": { "type": "boolean", "description": "Hard-gate Phase 3 (route generation) on Phase 2 (failing tests) completion." },
+        "redPhaseRequired": { "type": "boolean", "description": "Tests must be confirmed failing (RED) before handlers are written." },
+        "greenPhaseRequired": { "type": "boolean", "description": "Tests must pass (GREEN) before the phase is considered complete." },
+        "refactorPhaseOptional": { "type": "boolean", "description": "Whether the refactor step may be skipped after GREEN." },
+        "coverageThreshold": { "$ref": "#/$defs/percentage", "description": "Minimum line coverage percentage the TDD phase targets." },
+        "integrationTestRequired": { "type": "boolean", "description": "Every endpoint must have an integration test before its handler exists." },
+        "contractTestRequired": { "type": "boolean", "description": "Responses must be validated against the OpenAPI spec." },
+        "testExistenceGate": { "type": "boolean", "description": "Block route generation until a test file exists for every endpoint." }
+      }
+    },
+
+    "database": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Database provider, ORM, connection pooling, and schema defaults.",
+      "properties": {
+        "defaultProvider": { "type": "string", "enum": ["postgresql"], "description": "Database engine the generated API targets." },
+        "orm": { "type": "string", "enum": ["drizzle"], "description": "ORM used for schema, queries, and migrations." },
+        "connectionPoolSize": { "$ref": "#/$defs/positiveInt", "description": "Maximum connections in the pool." },
+        "connectionPoolMin": { "type": "integer", "minimum": 0, "description": "Minimum idle connections kept open in the pool." },
+        "idleTimeoutMs": { "$ref": "#/$defs/positiveInt", "description": "Milliseconds an idle connection stays open before being closed." },
+        "migrationSafety": { "type": "boolean", "description": "Review generated migrations for destructive operations before applying." },
+        "blockDestructiveMigrations": { "type": "boolean", "description": "Refuse to apply migrations that drop tables or columns." },
+        "softDeleteDefault": { "type": "boolean", "description": "Generate a deletedAt column and soft-delete semantics by default." },
+        "timestampsDefault": { "type": "boolean", "description": "Add createdAt/updatedAt columns to every table by default." },
+        "uuidPrimaryKeys": { "type": "boolean", "description": "Use UUID primary keys for generated tables." },
+        "serialPrimaryKeys": { "type": "boolean", "description": "Use serial (auto-increment integer) primary keys for generated tables." }
+      }
+    },
+
+    "auth": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Authentication and authorization defaults applied by the auth-middleware phase.",
+      "properties": {
+        "defaultStrategy": { "type": "string", "enum": ["jwt", "oauth2", "api-key", "session"], "description": "Authentication scheme generated when the OpenAPI spec does not specify one." },
+        "jwtAlgorithm": { "type": "string", "enum": ["HS256", "HS384", "HS512", "RS256", "RS384", "RS512", "ES256", "ES384", "ES512", "EdDSA"], "description": "JOSE algorithm used to sign JWTs." },
+        "tokenExpiry": { "$ref": "#/$defs/duration", "description": "Access token lifetime (e.g. \"15m\")." },
+        "refreshTokenExpiry": { "$ref": "#/$defs/duration", "description": "Refresh token lifetime (e.g. \"7d\")." },
+        "bcryptRounds": { "type": "integer", "minimum": 4, "maximum": 31, "description": "bcrypt cost factor for password hashing." },
+        "apiKeyLength": { "type": "integer", "minimum": 16, "description": "Byte length of generated API keys." },
+        "rateLimitPerUser": { "$ref": "#/$defs/positiveInt", "description": "Requests per window allowed per authenticated user." },
+        "sessionStrategy": { "type": "string", "enum": ["stateless", "stateful"], "description": "Whether sessions are stored server-side (stateful) or encoded in the token (stateless)." },
+        "rbacEnabled": { "type": "boolean", "description": "Generate role-based access control middleware." }
+      }
+    },
+
+    "testing": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Test framework, timeouts, load testing, and test database strategy.",
+      "properties": {
+        "framework": { "type": "string", "enum": ["vitest"], "description": "Unit and integration test runner." },
+        "httpClient": { "type": "string", "enum": ["supertest", "hono-testing"], "description": "HTTP client used by integration tests." },
+        "integrationTimeout": { "$ref": "#/$defs/positiveInt", "description": "Per-test timeout in milliseconds for integration tests." },
+        "unitTimeout": { "$ref": "#/$defs/positiveInt", "description": "Per-test timeout in milliseconds for unit tests." },
+        "contractTestEnabled": { "type": "boolean", "description": "Run contract tests that validate responses against the OpenAPI spec." },
+        "loadTestEnabled": { "type": "boolean", "description": "Generate and run k6 load tests." },
+        "loadTestVUs": { "$ref": "#/$defs/positiveInt", "description": "Number of k6 virtual users." },
+        "loadTestDuration": { "$ref": "#/$defs/duration", "description": "k6 steady-state duration (e.g. \"30s\")." },
+        "loadTestRampUp": { "$ref": "#/$defs/duration", "description": "k6 ramp-up duration (e.g. \"10s\")." },
+        "loadTestThresholds": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "k6 pass/fail thresholds.",
+          "properties": {
+            "http_req_duration_p95": { "$ref": "#/$defs/positiveInt", "description": "Maximum p95 request duration in milliseconds." },
+            "http_req_duration_p99": { "$ref": "#/$defs/positiveInt", "description": "Maximum p99 request duration in milliseconds." },
+            "http_req_failed_rate": { "$ref": "#/$defs/ratio", "description": "Maximum fraction of failed requests (0-1)." }
+          }
+        },
+        "testDatabase": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "How integration tests obtain an isolated database.",
+          "properties": {
+            "strategy": { "$ref": "#/$defs/testDatabaseStrategy", "description": "Primary isolation strategy." },
+            "alternativeStrategy": { "$ref": "#/$defs/testDatabaseStrategy", "description": "Fallback isolation strategy when the primary is unavailable." },
+            "seedBeforeTests": { "type": "boolean", "description": "Run the seed script before the integration suite." }
+          }
+        }
+      }
+    },
+
+    "qualityGate": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Criteria that must pass in Phase 7 before deployment config and the report are produced.",
+      "properties": {
+        "testsRequired": { "type": "boolean", "description": "All tests must pass." },
+        "typescriptRequired": { "type": "boolean", "description": "tsc --noEmit must succeed under strict mode." },
+        "buildRequired": { "type": "boolean", "description": "The production build must succeed." },
+        "securityAuditRequired": { "type": "boolean", "description": "security-scan.sh must report no vulnerabilities at or above the configured level." },
+        "coverageThreshold": { "$ref": "#/$defs/percentage", "description": "Minimum line coverage percentage enforced at the gate." },
+        "maxFixAttempts": { "type": "integer", "minimum": 0, "description": "How many automatic fix-and-retry loops run before the gate fails." },
+        "eslintRequired": { "type": "boolean", "description": "ESLint must report zero errors." },
+        "noAnyTypes": { "type": "boolean", "description": "Fail the gate if any `any` types are present in generated code." }
+      }
+    },
+
+    "deployment": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Supported deployment targets and their per-target defaults.",
+      "properties": {
+        "targets": {
+          "type": "array",
+          "uniqueItems": true,
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/deploymentTarget" },
+          "description": "Deployment targets the pipeline can generate configuration for."
+        },
+        "defaultTarget": { "$ref": "#/$defs/deploymentTarget", "description": "Target used when build-spec.json does not name one. Must appear in targets." },
+        "cloudflareWorkers": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Defaults for the cloudflare-workers target (wrangler.toml).",
+          "properties": {
+            "compatibilityDate": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$", "description": "Workers runtime compatibility date (YYYY-MM-DD)." },
+            "nodeCompat": { "type": "boolean", "description": "Enable the nodejs_compat compatibility flag." },
+            "hyperdrive": { "type": "boolean", "description": "Bind a Hyperdrive connection pool for PostgreSQL." },
+            "kv": { "type": "boolean", "description": "Bind a Workers KV namespace." },
+            "d1": { "type": "boolean", "description": "Bind a D1 database." },
+            "r2": { "type": "boolean", "description": "Bind an R2 bucket." },
+            "environments": { "$ref": "#/$defs/environmentList", "description": "Wrangler environments to generate." }
+          }
+        },
+        "nodeDocker": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Defaults for the node-docker target (Dockerfile, docker-compose).",
+          "properties": {
+            "nodeVersion": { "type": "string", "minLength": 1, "description": "Docker image tag for the node base image (e.g. \"22-alpine\")." },
+            "port": { "$ref": "#/$defs/port", "description": "Container port the server listens on." },
+            "healthCheckPath": { "$ref": "#/$defs/urlPath", "description": "HTTP path polled by the container health check." },
+            "processManager": { "type": "string", "enum": ["node", "pm2"], "description": "Process supervisor used inside the container." },
+            "multiStage": { "type": "boolean", "description": "Generate a multi-stage Dockerfile (build stage + runtime stage)." }
+          }
+        },
+        "awsLambda": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Defaults for the aws-lambda target (SAM template).",
+          "properties": {
+            "runtime": { "type": "string", "pattern": "^nodejs\\d+\\.x$", "description": "Lambda runtime identifier (e.g. \"nodejs22.x\")." },
+            "architecture": { "type": "string", "enum": ["arm64", "x86_64"], "description": "Lambda CPU architecture." },
+            "memorySizeMb": { "type": "integer", "minimum": 128, "maximum": 10240, "description": "Function memory in MB." },
+            "timeoutSeconds": { "type": "integer", "minimum": 1, "maximum": 900, "description": "Function timeout in seconds (API Gateway caps at 29-30s)." },
+            "apiGatewayType": { "type": "string", "enum": ["http-api", "rest-api"], "description": "API Gateway flavour fronting the function." },
+            "bundler": { "type": "string", "enum": ["esbuild"], "description": "Bundler used to package the handler." },
+            "framework": { "type": "string", "enum": ["sam"], "description": "Infrastructure-as-code tool used to deploy." },
+            "provisionedConcurrency": { "type": "integer", "minimum": 0, "description": "Provisioned concurrency units (0 disables)." }
+          }
+        },
+        "railway": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Defaults for the railway target (railway.toml, nixpacks.toml).",
+          "properties": {
+            "builder": { "$ref": "#/$defs/paasBuilder", "description": "Build strategy Railway uses." },
+            "healthcheckPath": { "$ref": "#/$defs/urlPath", "description": "HTTP path Railway polls before routing traffic." },
+            "healthcheckTimeoutSeconds": { "$ref": "#/$defs/positiveInt", "description": "Seconds to wait for the health check to pass." },
+            "restartPolicy": { "type": "string", "enum": ["on-failure", "always", "never"], "description": "Restart policy for crashed containers." },
+            "restartPolicyMaxRetries": { "type": "integer", "minimum": 0, "description": "Maximum restart attempts under the on-failure policy." },
+            "managedPostgres": { "type": "boolean", "description": "Provision a Railway-managed PostgreSQL service." },
+            "autoDeployFromGitHub": { "type": "boolean", "description": "Deploy automatically on push to the connected GitHub branch." }
+          }
+        },
+        "fly": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Defaults for the fly target (fly.toml).",
+          "properties": {
+            "builder": { "$ref": "#/$defs/paasBuilder", "description": "Build strategy Fly uses." },
+            "internalPort": { "$ref": "#/$defs/port", "description": "Port the app listens on inside the Machine." },
+            "healthcheckPath": { "$ref": "#/$defs/urlPath", "description": "HTTP path Fly polls for Machine health." },
+            "autoStopMachines": { "type": "string", "enum": ["off", "stop", "suspend"], "description": "What Fly does with idle Machines." },
+            "autoStartMachines": { "type": "boolean", "description": "Start stopped Machines on incoming traffic." },
+            "minMachinesRunning": { "type": "integer", "minimum": 0, "description": "Machines kept running regardless of traffic." },
+            "maxMachines": { "$ref": "#/$defs/positiveInt", "description": "Upper bound on Machines under autoscaling." },
+            "managedPostgres": { "type": "boolean", "description": "Attach a Fly Managed Postgres cluster." },
+            "autoDeployFromGitHub": { "type": "boolean", "description": "Deploy automatically from GitHub Actions on push." }
+          }
+        },
+        "cicd": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Continuous integration and delivery workflow generation.",
+          "properties": {
+            "provider": { "type": "string", "enum": ["github-actions"], "description": "CI/CD platform the workflow is generated for." },
+            "runTests": { "type": "boolean", "description": "Run the test suite in CI." },
+            "runTypeCheck": { "type": "boolean", "description": "Run tsc --noEmit in CI." },
+            "runSecurityAudit": { "type": "boolean", "description": "Run the dependency security audit in CI." },
+            "runBuild": { "type": "boolean", "description": "Run the production build in CI." },
+            "autoDeployStaging": { "type": "boolean", "description": "Deploy to staging automatically when CI passes on the main branch." },
+            "autoDeployProduction": { "type": "boolean", "description": "Deploy to production automatically (usually false; use a manual approval)." }
+          }
+        }
+      }
+    },
+
+    "security": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Security middleware defaults and audit policy.",
+      "properties": {
+        "rateLimiting": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Global rate limiting middleware.",
+          "properties": {
+            "enabled": { "type": "boolean", "description": "Apply rate limiting to every route." },
+            "requests": { "$ref": "#/$defs/positiveInt", "description": "Requests allowed per window." },
+            "window": { "$ref": "#/$defs/duration", "description": "Window length (e.g. \"1m\")." },
+            "strategy": { "type": "string", "enum": ["sliding-window", "fixed-window", "token-bucket"], "description": "Rate limiting algorithm." }
+          }
+        },
+        "cors": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Cross-origin resource sharing middleware.",
+          "properties": {
+            "enabled": { "type": "boolean", "description": "Emit CORS headers." },
+            "origins": { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "Allowed origins. \"*\" is acceptable in development only." },
+            "methods": { "type": "array", "uniqueItems": true, "items": { "type": "string", "enum": ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"] }, "description": "Allowed HTTP methods." },
+            "allowHeaders": { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "Allowed request headers." },
+            "maxAge": { "type": "integer", "minimum": 0, "description": "Seconds a preflight response may be cached." }
+          }
+        },
+        "headers": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Helmet-equivalent security response headers.",
+          "properties": {
+            "hsts": { "type": "boolean", "description": "Send Strict-Transport-Security." },
+            "noSniff": { "type": "boolean", "description": "Send X-Content-Type-Options: nosniff." },
+            "xssProtection": { "type": "boolean", "description": "Send X-XSS-Protection." },
+            "frameOptions": { "type": "string", "enum": ["DENY", "SAMEORIGIN"], "description": "Value for X-Frame-Options." }
+          }
+        },
+        "audit": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Dependency vulnerability audit policy (security-scan.sh).",
+          "properties": {
+            "level": { "type": "string", "enum": ["low", "moderate", "high", "critical"], "description": "Minimum severity that fails the audit." },
+            "failOnVulnerability": { "type": "boolean", "description": "Fail the quality gate when a vulnerability at or above level is found." },
+            "checkLockfile": { "type": "boolean", "description": "Verify the lockfile is present and in sync." }
+          }
+        },
+        "inputValidation": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Request size and sanitization limits.",
+          "properties": {
+            "maxBodySizeKb": { "$ref": "#/$defs/positiveInt", "description": "Maximum request body size in kilobytes." },
+            "maxUrlLengthChars": { "$ref": "#/$defs/positiveInt", "description": "Maximum URL length in characters." },
+            "sanitizeStrings": { "type": "boolean", "description": "Strip control characters and trim string inputs." }
+          }
+        }
+      }
+    },
+
+    "api": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "API response conventions shared by generated routes.",
+      "properties": {
+        "pagination": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "List endpoint pagination defaults.",
+          "properties": {
+            "defaultLimit": { "$ref": "#/$defs/positiveInt", "description": "Page size when the client omits limit." },
+            "maxLimit": { "$ref": "#/$defs/positiveInt", "description": "Largest page size a client may request." },
+            "strategy": { "type": "string", "enum": ["offset", "cursor", "keyset"], "description": "Default pagination style." },
+            "cursorPaginationAvailable": { "type": "boolean", "description": "Also expose cursor pagination on list endpoints." }
+          }
+        },
+        "responseFormat": { "type": "string", "enum": ["json"], "description": "Wire format for responses." },
+        "envelope": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Field names of the standard response envelope.",
+          "properties": {
+            "dataField": { "type": "string", "minLength": 1, "description": "Key holding the payload." },
+            "metaField": { "type": "string", "minLength": 1, "description": "Key holding pagination and request metadata." },
+            "errorField": { "type": "string", "minLength": 1, "description": "Key holding structured error details." }
+          }
+        },
+        "versioning": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "API versioning strategy.",
+          "properties": {
+            "strategy": { "type": "string", "enum": ["url-prefix", "header", "query", "none"], "description": "Where the API version is carried." },
+            "currentVersion": { "type": "string", "pattern": "^v\\d+$", "description": "Current version label (e.g. \"v1\")." },
+            "deprecationHeaderEnabled": { "type": "boolean", "description": "Send Deprecation/Sunset headers on deprecated versions." }
+          }
+        },
+        "filtering": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Query-string filtering on list endpoints.",
+          "properties": {
+            "enabled": { "type": "boolean", "description": "Generate filter parsing for list endpoints." },
+            "operators": { "type": "array", "uniqueItems": true, "items": { "type": "string", "enum": ["eq", "neq", "gt", "gte", "lt", "lte", "like", "ilike", "in", "nin", "between", "isnull"] }, "description": "Filter operators clients may use." }
+          }
+        },
+        "sorting": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Sorting on list endpoints.",
+          "properties": {
+            "enabled": { "type": "boolean", "description": "Generate sort parsing for list endpoints." },
+            "defaultField": { "type": "string", "minLength": 1, "description": "Field used when the client omits a sort." },
+            "defaultOrder": { "type": "string", "enum": ["asc", "desc"], "description": "Direction used when the client omits one." },
+            "maxFields": { "$ref": "#/$defs/positiveInt", "description": "Maximum number of sort fields per request." }
+          }
+        },
+        "healthCheck": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Health endpoint configuration.",
+          "properties": {
+            "path": { "$ref": "#/$defs/urlPath", "description": "Route path of the health endpoint." },
+            "includeDbStatus": { "type": "boolean", "description": "Report database connectivity in the health response." },
+            "includeVersion": { "type": "boolean", "description": "Report the application version in the health response." }
+          }
+        }
+      }
+    },
+
+    "reporting": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Where and what the Phase 9 build report writes.",
+      "properties": {
+        "outputDir": { "type": "string", "minLength": 1, "description": "Directory (relative to the project root) that receives report files." },
+        "buildReportFile": { "type": "string", "minLength": 1, "description": "Filename of the main build report." },
+        "testReportFile": { "type": "string", "minLength": 1, "description": "Filename of the test results report." },
+        "loadTestReportFile": { "type": "string", "minLength": 1, "description": "Filename of the k6 load test report." },
+        "securityReportFile": { "type": "string", "minLength": 1, "description": "Filename of the security audit report." },
+        "includeEndpointInventory": { "type": "boolean", "description": "List every generated endpoint in the build report." },
+        "includeSchemaDiagram": { "type": "boolean", "description": "Embed an entity-relationship diagram in the build report." }
+      }
+    },
+
+    "orchestration": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Phase dependency graph and concurrency for the autonomous pipeline.",
+      "properties": {
+        "enabled": { "type": "boolean", "description": "Run independent phases concurrently according to the dependency graph." },
+        "maxConcurrent": { "$ref": "#/$defs/positiveInt", "description": "Maximum phases running at once." },
+        "phases": {
+          "type": "object",
+          "description": "Pipeline phases keyed by name. Names must be kebab-case.",
+          "minProperties": 1,
+          "propertyNames": { "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$" },
+          "additionalProperties": { "$ref": "#/$defs/phase" }
+        },
+        "qualityGateSubtasks": {
+          "type": "object",
+          "description": "Independent checks run in parallel inside the quality-gate phase, keyed by name.",
+          "propertyNames": { "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$" },
+          "additionalProperties": { "$ref": "#/$defs/subtask" }
+        },
+        "reporting": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Progress output while phases run.",
+          "properties": {
+            "showStreamingResults": { "type": "boolean", "description": "Print each phase result as it completes." },
+            "showBatchSummary": { "type": "boolean", "description": "Print a summary after each concurrent batch." },
+            "showSpeedupEstimate": { "type": "boolean", "description": "Estimate wall-clock savings versus sequential execution." },
+            "includeTimeline": { "type": "boolean", "description": "Include a phase timeline in the final report." }
+          }
+        }
+      }
+    }
+  },
+
+  "$defs": {
+    "semver": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z.-]+)?(\\+[0-9A-Za-z.-]+)?$",
+      "description": "Semantic version string (MAJOR.MINOR.PATCH with optional pre-release and build metadata)."
+    },
+    "percentage": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100,
+      "description": "Percentage between 0 and 100."
+    },
+    "ratio": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Fraction between 0 and 1 (e.g. 0.01 = 1%)."
+    },
+    "positiveInt": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Whole number greater than zero."
+    },
+    "port": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 65535,
+      "description": "TCP port number."
+    },
+    "duration": {
+      "type": "string",
+      "pattern": "^\\d+(ms|s|m|h|d)$",
+      "description": "Duration string: integer followed by ms, s, m, h, or d (e.g. \"30s\", \"15m\", \"7d\")."
+    },
+    "urlPath": {
+      "type": "string",
+      "pattern": "^/",
+      "description": "Absolute URL path beginning with a slash."
+    },
+    "environmentList": {
+      "type": "array",
+      "uniqueItems": true,
+      "minItems": 1,
+      "items": { "type": "string", "enum": ["development", "staging", "production"] },
+      "description": "Named deployment environments."
+    },
+    "deploymentTarget": {
+      "type": "string",
+      "enum": ["cloudflare-workers", "node-docker", "aws-lambda", "railway", "fly"],
+      "description": "A deployment platform the pipeline can generate configuration for."
+    },
+    "paasBuilder": {
+      "type": "string",
+      "enum": ["dockerfile", "nixpacks"],
+      "description": "Build strategy for PaaS targets."
+    },
+    "testDatabaseStrategy": {
+      "type": "string",
+      "enum": ["transaction-rollback", "testcontainers", "pglite", "schema-per-worker"],
+      "description": "How each test run gets an isolated database."
+    },
+    "resourceList": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9-]*:[a-z][a-z0-9-]*$",
+        "description": "Resource identifier in category:name form (e.g. \"filesystem:schema\"). Two phases declaring the same resource cannot run concurrently."
+      },
+      "description": "Exclusive resources a phase or subtask holds while running."
+    },
+    "phase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["depends", "description"],
+      "description": "One pipeline phase in the orchestration graph.",
+      "properties": {
+        "depends": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$" },
+          "description": "Phase names that must complete before this phase starts."
+        },
+        "resources": { "$ref": "#/$defs/resourceList" },
+        "blocking": { "type": "boolean", "description": "When true, failure of this phase fails the whole pipeline; when false it is reported and the pipeline continues." },
+        "description": { "type": "string", "minLength": 1, "description": "What the phase does." }
+      }
+    },
+    "subtask": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["description"],
+      "description": "One independent check inside the quality gate.",
+      "properties": {
+        "resources": { "$ref": "#/$defs/resourceList" },
+        "description": { "type": "string", "minLength": 1, "description": "What the subtask runs." }
+      }
+    }
+  }
+}
