@@ -4,23 +4,17 @@ set -euo pipefail
 # ============================================================================
 # run-tests.sh - Run Vitest tests with coverage
 # Usage: ./scripts/run-tests.sh [--unit|--integration|--all|--coverage]
+#
+# Reads testing.integrationTimeout and tdd.coverageThreshold from
+# .claude/pipeline.config.json; --coverage fails when line coverage is below
+# the threshold.
 # ============================================================================
 
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-CYAN='\033[0;36m'
-NC='\033[0m'
-
-info()    { echo -e "${BLUE}[INFO]${NC} $*"; }
-success() { echo -e "${GREEN}[OK]${NC} $*"; }
-warn()    { echo -e "${YELLOW}[WARN]${NC} $*"; }
-error()   { echo -e "${RED}[ERROR]${NC} $*" >&2; }
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-API_DIR="$PROJECT_ROOT/api"
+# shellcheck source=lib/common.sh
+source "$SCRIPT_DIR/lib/common.sh"
+PROJECT_ROOT="$(common_project_root)"
+API_DIR="$(common_api_dir)"
 
 TEST_MODE="all"
 WITH_COVERAGE=false
@@ -60,7 +54,7 @@ case "$TEST_MODE" in
   integration)
     info "Running integration tests..."
     VITEST_CMD+=("--include" "tests/integration/**/*.{test,spec}.ts")
-    VITEST_CMD+=("--testTimeout" "30000")
+    VITEST_CMD+=("--testTimeout" "$(common_config_get 'testing.integrationTimeout' 30000)")
     ;;
   all)
     info "Running all tests..."
@@ -98,4 +92,22 @@ if [[ "$WITH_COVERAGE" == true && -f "coverage/coverage-summary.json" ]]; then
   echo ""
   info "Coverage report generated at: $API_DIR/coverage/"
   info "Open coverage/index.html for the full HTML report."
+
+  # Enforce tdd.coverageThreshold from .claude/pipeline.config.json (default 80).
+  # Uses the json-summary reporter output; templates/shared/vitest.config.ts emits it.
+  THRESHOLD="$(common_config_get 'tdd.coverageThreshold' 80)"
+  LINES_PCT="$(node -e '
+    const s = JSON.parse(require("fs").readFileSync("coverage/coverage-summary.json", "utf8"));
+    process.stdout.write(String(s.total?.lines?.pct ?? ""));
+  ' 2>/dev/null || true)"
+  if [[ -n "$LINES_PCT" ]]; then
+    if node -e 'process.exit(Number(process.argv[1]) >= Number(process.argv[2]) ? 0 : 1)' "$LINES_PCT" "$THRESHOLD"; then
+      success "Line coverage ${LINES_PCT}% meets the ${THRESHOLD}% threshold (tdd.coverageThreshold)."
+    else
+      error "Line coverage ${LINES_PCT}% is below the ${THRESHOLD}% threshold (tdd.coverageThreshold)."
+      exit 1
+    fi
+  else
+    warn "Could not read total line coverage from coverage-summary.json; threshold not enforced."
+  fi
 fi

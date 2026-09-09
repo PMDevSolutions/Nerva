@@ -7,22 +7,11 @@ set -euo pipefail
 # Usage: ./scripts/generate-openapi-docs.sh [--serve] [--port 8080]
 # ============================================================================
 
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-# shellcheck disable=SC2034 # CYAN is used in echo -e strings below
-CYAN='\033[0;36m'
-NC='\033[0m'
-
-info()    { echo -e "${BLUE}[INFO]${NC} $*"; }
-success() { echo -e "${GREEN}[OK]${NC} $*"; }
-warn()    { echo -e "${YELLOW}[WARN]${NC} $*"; }
-error()   { echo -e "${RED}[ERROR]${NC} $*" >&2; }
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-API_DIR="$PROJECT_ROOT/api"
+# shellcheck source=lib/common.sh
+source "$SCRIPT_DIR/lib/common.sh"
+PROJECT_ROOT="$(common_project_root)"
+API_DIR="$(common_api_dir)"
 DOCS_DIR="$PROJECT_ROOT/docs"
 
 SERVE=false

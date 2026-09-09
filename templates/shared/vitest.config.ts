@@ -17,7 +17,8 @@ export default defineConfig({
     hookTimeout: 30_000,
     coverage: {
       provider: 'v8',
-      reporter: ['text', 'text-summary', 'lcov', 'json'],
+      // json-summary feeds the coverage gate in scripts/run-tests.sh --coverage.
+      reporter: ['text', 'text-summary', 'lcov', 'json', 'json-summary'],
       include: ['src/**/*.ts'],
       exclude: [
         'src/**/*.test.ts',
