@@ -11,6 +11,9 @@ importers:
       '@cloudflare/workers-types':
         specifier: ^4.20260415.1
         version: 4.20260511.1
+      '@faker-js/faker':
+        specifier: ^10.6.0
+        version: 10.6.0
       '@hono/node-server':
         specifier: ^1.16.0
         version: 1.19.14(hono@4.12.18)
@@ -37,6 +40,10 @@ packages:
 
   '@cloudflare/workers-types@4.20260511.1':
     resolution: {integrity: sha512-FA+si7cOq9i/gtCHhIc0XJL0l1F/ApF+m00752Aj7WZFJrj3ZulT2T8/+rT3BabMT0QEnqFEGIqCgrmqhgEfMg==}
+
+  '@faker-js/faker@10.6.0':
+    resolution: {integrity: sha512-3RQHgEtvL1Frl/d1cSreo7qhJ3Gk1OdNUai/CtZ8G+wYeRQnJih3s9xJ9/kgYekPQRdwgh0HXRPqMlzWGwivIQ==}
+    engines: {node: ^20.19.0 || ^22.13.0 || ^23.5.0 || >=24.0.0, npm: '>=10'}
 
   '@hono/node-server@1.19.14':
     resolution: {integrity: sha512-GwtvgtXxnWsucXvbQXkRgqksiH2Qed37H9xHZocE5sA3N8O8O8/8FA3uclQXxXVzc9XBZuEOMK7+r02FmSpHtw==}
@@ -161,6 +168,8 @@ packages:
 snapshots:
 
   '@cloudflare/workers-types@4.20260511.1': {}
+
+  '@faker-js/faker@10.6.0': {}
 
   '@hono/node-server@1.19.14(hono@4.12.18)':
     dependencies:

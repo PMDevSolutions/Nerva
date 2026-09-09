@@ -288,6 +288,10 @@ jobs:
         run: pnpm exec tsc --noEmit -p tsconfig.lambda.json
         working-directory: templates/snippets
 
+      - name: Type-check test fixture snippets
+        run: pnpm exec tsc --noEmit -p tsconfig.fixtures.json
+        working-directory: templates/snippets
+
   # Generates a real project per target with setup-project.sh and type-checks
   # it. Unlike typecheck-templates this has no lockfile on purpose: it installs
   # whatever `pnpm add` resolves today, so a dependency release that breaks

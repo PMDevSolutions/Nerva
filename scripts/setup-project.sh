@@ -133,7 +133,7 @@ info "Creating Nerva project: ${CYAN}$PROJECT_NAME${NC} (platform: $PLATFORM)"
 
 step "Creating directory structure..."
 make_dirs "$TARGET_DIR/api/src"/{routes,db/migrations,middleware,lib,types}
-make_dirs "$TARGET_DIR/api/tests"/{unit,integration,load}
+make_dirs "$TARGET_DIR/api/tests"/{unit,integration,load,fixtures}
 make_dirs "$TARGET_DIR/api/scripts"
 make_dirs "$TARGET_DIR/.github/workflows"
 make_dirs "$TARGET_DIR/docs"
@@ -240,7 +240,7 @@ step "Installing dev dependencies..."
 # generated projects compile (TS 6 stopped auto-including @types/*); bump it
 # deliberately, together with the snippets and the shared tsconfig templates.
 run_cmd pnpm add -D vitest typescript@^6 eslint prettier drizzle-kit @types/node tsx \
-  @eslint/js typescript-eslint @vitest/coverage-v8
+  @eslint/js typescript-eslint @vitest/coverage-v8 @faker-js/faker
 success "Dev dependencies installed."
 
 step "Creating initial source files..."
@@ -313,6 +313,12 @@ fi
 
 copy_file "$TEMPLATES_DIR/snippets/shared/tests/setup.ts" "$API_DIR/tests/setup.ts"
 copy_file "$TEMPLATES_DIR/snippets/shared/tests/soft-delete.test.ts" "$API_DIR/tests/soft-delete.test.ts"
+
+# Test data factories (@faker-js/faker): a generic createFactory plus a
+# userFactory for the users table, and an example test that documents usage.
+copy_file "$TEMPLATES_DIR/snippets/shared/tests/fixtures/factory.ts" "$API_DIR/tests/fixtures/factory.ts"
+copy_file "$TEMPLATES_DIR/snippets/shared/tests/fixtures/index.ts" "$API_DIR/tests/fixtures/index.ts"
+copy_file "$TEMPLATES_DIR/snippets/shared/tests/fixtures.test.ts" "$API_DIR/tests/fixtures.test.ts"
 
 if [[ "$PLATFORM" == "cloudflare" ]]; then
   copy_file "$TEMPLATES_DIR/snippets/cloudflare/tests/unit/health.test.ts" "$API_DIR/tests/unit/health.test.ts"
@@ -486,6 +492,12 @@ if $MULTI_TENANT; then
   # Tenant-isolation tests: resolution + query scoping run everywhere; the
   # live RLS/search_path suite activates when TENANCY_TEST_DATABASE_URL is set.
   copy_file "$TEMPLATES_DIR/snippets/shared/tests/tenancy.test.ts" "$API_DIR/tests/tenancy.test.ts"
+
+  # Factories for the tenants and projects tables, re-exported from tests/fixtures.
+  copy_file "$TEMPLATES_DIR/snippets/shared/tests/fixtures/tenancy.ts" "$API_DIR/tests/fixtures/tenancy.ts"
+  append_file "$API_DIR/tests/fixtures/index.ts" << 'MTFIXEOF'
+export { tenantFactory, projectFactory } from './tenancy.js';
+MTFIXEOF
 
   if [[ "$PLATFORM" == "cloudflare" ]]; then
     ENV_EXAMPLE_FILE=".dev.vars.example"
@@ -693,6 +705,15 @@ pnpm test                 # run the test suite
 \`\`\`
 
 The dev server listens at $DEV_BASE_URL -- verify with a GET to /health.
+
+## Test data
+
+\`api/tests/fixtures/\` holds faker-backed factories. \`userFactory()\` builds an
+insert-ready user, \`userFactory({ name: 'Custom' })\` overrides fields, and
+\`userFactory.createMany(5)\` builds a batch with unique emails. Call
+\`seedFactories()\` at the top of a test for reproducible data. Add one factory
+per table and re-export it from \`tests/fixtures/index.ts\`;
+\`tests/fixtures.test.ts\` shows the pattern.
 READMEDYN
   if [[ "$PLATFORM" == "cloudflare" ]]; then
     cat << 'READMECF'
