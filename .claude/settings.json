@@ -1,0 +1,43 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/secret-guard.sh",
+            "description": "Block git add of .env/.dev.vars/keys/credentials, forced adds, and commit -a while a secret is tracked"
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/prod-db-guard.sh",
+            "description": "Block drizzle-kit push and destructive SQL against production databases, and drizzle-kit drop"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/coverage-check.sh",
+            "description": "Compare vitest coverage output with tdd.coverageThreshold from pipeline.config.json"
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/migration-safety-reminder.sh",
+            "description": "After drizzle-kit generate, remind to run the destructive-DDL check; after drizzle-kit push, remind that push is dev-only"
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/quality-gate-reminder.sh",
+            "description": "After all vitest tests pass, remind to run check-types, security-scan, and the coverage threshold"
+          }
+        ]
+      }
+    ]
+  }
+}

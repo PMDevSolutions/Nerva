@@ -21,6 +21,7 @@ Welcome to the Nerva documentation. Nerva is a Claude Code-integrated API & back
 | [Agent Catalog](../../.claude/CUSTOM-AGENTS-GUIDE.md) | All 24 Claude Code agents |
 | [Pipeline Configuration](../../.claude/pipeline.config.json) | Pipeline thresholds and settings |
 | [Patreon Voting](../community/patreon-voting.md) | Community roadmap voting process |
+| [Hooks](hooks.md) | Claude Code hook guards (secrets, production DB) and post-run reminders |
 
 ## Technology Stack
 
