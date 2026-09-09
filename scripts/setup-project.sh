@@ -134,6 +134,8 @@ info "Creating Nerva project: ${CYAN}$PROJECT_NAME${NC} (platform: $PLATFORM)"
 step "Creating directory structure..."
 make_dirs "$TARGET_DIR/api/src"/{routes,db/migrations,middleware,lib,types}
 make_dirs "$TARGET_DIR/api/tests"/{unit,integration,load}
+make_dirs "$TARGET_DIR/api/scripts"
+make_dirs "$TARGET_DIR/.github/workflows"
 make_dirs "$TARGET_DIR/docs"
 success "Directory structure created."
 
@@ -159,11 +161,21 @@ if ! $DRY_RUN; then
 fi
 
 DEV_ENTRY="src/index.ts"
-LAMBDA_SCRIPTS=""
+PLATFORM_SCRIPTS=""
+BUILD_SCRIPT=$'\n    "build": "tsc",'
 if [[ "$PLATFORM" == "lambda" ]]; then
   DEV_ENTRY="src/dev.ts"
-  LAMBDA_SCRIPTS=$'\n    "build:lambda": "node esbuild.config.mjs",\n    "deploy": "pnpm run build:lambda && sam deploy",'
+  PLATFORM_SCRIPTS=$'\n    "build:lambda": "node esbuild.config.mjs",\n    "deploy": "pnpm run build:lambda && sam deploy",'
+elif [[ "$PLATFORM" == "cloudflare" ]]; then
+  # A bare `wrangler deploy` would publish the default (development) environment.
+  # Refuse it; every deploy must name staging or production and stamps the
+  # commit SHA into COMMIT_SHA so /health reports what is actually running.
+  PLATFORM_SCRIPTS=$'\n    "deploy": "node -e \\"console.error(\'Refusing bare deploy of the development environment. Use: pnpm deploy:staging or pnpm deploy:production.\'); process.exit(1)\\"",\n    "deploy:staging": "wrangler deploy --env staging --var COMMIT_SHA:$(git rev-parse --short HEAD)",\n    "deploy:production": "wrangler deploy --env production --var COMMIT_SHA:$(git rev-parse --short HEAD)",\n    "build": "wrangler deploy --dry-run --outdir dist",'
+  BUILD_SCRIPT=""
 fi
+
+# Pin the generating pnpm so the project keeps using it under corepack.
+PNPM_VERSION="$(pnpm --version 2>/dev/null || echo 10.15.1)"
 
 write_file "$API_DIR/package.json" << PKGJSON
 {
@@ -171,9 +183,9 @@ write_file "$API_DIR/package.json" << PKGJSON
   "version": "0.0.1",
   "private": true,
   "type": "module",
-  "scripts": {$LAMBDA_SCRIPTS
-    "dev": "tsx watch $DEV_ENTRY",
-    "build": "tsc",
+  "packageManager": "pnpm@$PNPM_VERSION",
+  "scripts": {$PLATFORM_SCRIPTS
+    "dev": "tsx watch $DEV_ENTRY",$BUILD_SCRIPT
     "start": "node dist/index.js",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -185,12 +197,35 @@ write_file "$API_DIR/package.json" << PKGJSON
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "db:seed": "tsx src/db/seed.ts"
+    "db:seed": "tsx src/db/seed.ts",
+    "db:check-destructive": "node scripts/check-destructive-migrations.mjs",
+    "db:check-drift": "tsx src/db/schema-drift.ts",
+    "db:check-drift:strict": "tsx src/db/schema-drift.ts --strict"
   }
 }
 PKGJSON
 
 success "package.json created."
+
+# pnpm >= 10 refuses to run dependency build scripts it has not been told about,
+# and newer releases fail `pnpm add` outright (ERR_PNPM_IGNORED_BUILDS) instead
+# of warning. esbuild (tsx, vitest, drizzle-kit) needs its postinstall; workerd
+# (wrangler) too. `onlyBuiltDependencies` is the pnpm 10 key, `allowBuilds` the
+# pnpm 11+ key; both are listed so any corepack-selected pnpm honors one of them.
+# (The "pnpm" field in package.json is ignored by pnpm 11+, so it must live here.)
+if [[ "$PLATFORM" == "cloudflare" ]]; then
+  BUILD_DEPS="esbuild workerd"
+else
+  BUILD_DEPS="esbuild"
+fi
+{
+  echo "# Dependencies allowed to run install scripts. See scripts/setup-project.sh in Nerva."
+  echo "onlyBuiltDependencies:"
+  for dep in $BUILD_DEPS; do echo "  - $dep"; done
+  echo "allowBuilds:"
+  for dep in $BUILD_DEPS; do echo "  $dep: true"; done
+} | write_file "$API_DIR/pnpm-workspace.yaml"
+success "pnpm-workspace.yaml created (build scripts allowed for: $BUILD_DEPS)."
 
 step "Installing production dependencies..."
 # NOTE: keep these versions in sync with templates/snippets/package.json — the
@@ -420,6 +455,19 @@ ENVEOF
   success "Node.js / Docker configured."
 fi
 
+# ---- Migration safety ----
+step "Setting up migration safety checks..."
+# Destructive-DDL guard: dependency-free copy of the framework script, run as
+# `pnpm db:check-destructive` and by .github/workflows/schema-drift.yml.
+copy_file "$SCRIPT_DIR/check-destructive-migrations.js" "$API_DIR/scripts/check-destructive-migrations.mjs"
+# Production schema drift check (`pnpm db:check-drift[:strict]`), driven by
+# PROD_DATABASE_URL only. Both workflows degrade to a notice until the
+# PROD_DATABASE_URL repository secret is configured.
+copy_file "$TEMPLATES_DIR/snippets/shared/src/db/schema-drift.ts" "$API_DIR/src/db/schema-drift.ts"
+copy_file "$TEMPLATES_DIR/shared/workflows/schema-drift.yml"   "$TARGET_DIR/.github/workflows/schema-drift.yml"
+copy_file "$TEMPLATES_DIR/shared/workflows/schema-applied.yml" "$TARGET_DIR/.github/workflows/schema-applied.yml"
+success "Migration safety checks configured (db:check-destructive, db:check-drift)."
+
 # ---- Multi-tenancy (optional) ----
 if $MULTI_TENANT; then
   step "Setting up multi-tenancy..."
@@ -646,6 +694,28 @@ pnpm test                 # run the test suite
 
 The dev server listens at $DEV_BASE_URL -- verify with a GET to /health.
 READMEDYN
+  if [[ "$PLATFORM" == "cloudflare" ]]; then
+    cat << 'READMECF'
+
+## Deploying to Cloudflare Workers
+
+`api/wrangler.toml` defines `staging` and `production` environments. Production
+serves only its custom domain: `workers_dev` and `preview_urls` are off so there
+is no unguarded `*.workers.dev` ingress. Every deploy stamps the commit into the
+`COMMIT_SHA` var, which `/health` reports.
+
+```bash
+cd api
+pnpm run build              # wrangler dry-run bundle, no upload
+pnpm deploy:staging         # wrangler deploy --env staging
+pnpm deploy:production      # wrangler deploy --env production
+```
+
+`pnpm run deploy` on its own is refused: it would publish the default
+(development) environment. Set secrets per environment with
+`wrangler secret put <NAME> --env <staging|production>`.
+READMECF
+  fi
   if [[ "$PLATFORM" == "lambda" ]]; then
     cat << 'READMELAMBDA'
 
@@ -896,6 +966,34 @@ documented in the Nerva framework repo under
 `docs/api-development/multi-tenancy.md`.
 READMEMT
   fi
+  cat << 'READMEMIGRATION'
+
+## Migration safety
+
+Two checks guard the database schema. Run them from `api/`:
+
+```bash
+pnpm db:check-destructive                              # scan migrations for DROP/TRUNCATE/etc. (no DB needed)
+PROD_DATABASE_URL=postgres://... pnpm db:check-drift         # prod has every declared table/column/enum (lenient)
+PROD_DATABASE_URL=postgres://... pnpm db:check-drift:strict  # also fails on committed-but-unapplied migrations
+```
+
+`scripts/check-destructive-migrations.mjs` fails when a committed migration in
+`src/db/migrations/` contains destructive DDL. Allowlist a reviewed exception
+with a header comment in the migration file (the reason is required):
+
+```sql
+-- nerva:allow-destructive: <why this destructive change is safe>
+```
+
+`src/db/schema-drift.ts` compares `src/db/schema.ts` against the database in
+`PROD_DATABASE_URL` (never `DATABASE_URL`). `.github/workflows/schema-drift.yml`
+runs both checks on pull requests that touch `api/src/db/**`;
+`.github/workflows/schema-applied.yml` runs the strict check daily and opens a
+`schema-drift` issue when production is behind. Add the `PROD_DATABASE_URL`
+repository secret (a read-only role is enough) to activate the drift steps;
+until then they print a notice and pass.
+READMEMIGRATION
   cat << 'READMESTATIC'
 
 ## Postman
@@ -983,6 +1081,7 @@ if ! $DRY_RUN; then
     echo "    pnpm dev                  # Start dev server"
   fi
   echo "    pnpm test                 # Run tests"
+  echo "    pnpm db:check-destructive # Scan migrations for destructive DDL"
   echo ""
   echo "  Postman:"
   echo "    Import postman/collection.json and postman/environment.json"

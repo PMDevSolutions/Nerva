@@ -4,6 +4,11 @@ main = "src/index.ts"
 compatibility_date = "2025-12-01"
 compatibility_flags = ["nodejs_compat"]
 
+# Workers Logs — structured JSON logs surfaced in the Cloudflare dashboard.
+[observability]
+enabled = true
+head_sampling_rate = 1
+
 # Development settings
 [dev]
 port = 8787
@@ -30,15 +35,26 @@ id = "<YOUR_HYPERDRIVE_ID>"
 ENVIRONMENT = "development"
 LOG_LEVEL = "debug"
 APP_VERSION = "0.0.1"
+# Overridden at deploy time by the deploy:* scripts:
+#   wrangler deploy --env staging --var COMMIT_SHA:$(git rev-parse --short HEAD)
+COMMIT_SHA = "dev"
 HEALTH_DB_TIMEOUT_MS = "2000"
 
 # Staging environment
 [env.staging]
 name = "nerva-api-staging"
+
+[env.staging.observability]
+enabled = true
+head_sampling_rate = 1
+
 [env.staging.vars]
 ENVIRONMENT = "staging"
 LOG_LEVEL = "info"
 APP_VERSION = "0.0.1"
+# Sentinel: an obviously-invalid default makes a forgotten --var override
+# visible in /health and logs instead of silently reporting "dev".
+COMMIT_SHA = "UNSET"
 HEALTH_DB_TIMEOUT_MS = "2000"
 
 [[env.staging.d1_databases]]
@@ -57,13 +73,24 @@ id = "<YOUR_STAGING_HYPERDRIVE_ID>"
 # Production environment
 [env.production]
 name = "nerva-api-production"
+# Only the custom domain serves production. Disable the default *.workers.dev
+# hostname and preview URLs so there is no alternate, unguarded public ingress
+# that bypasses zone-level WAF / rate limiting bound to the canonical host.
+workers_dev = false
+preview_urls = false
 routes = [
   { pattern = "api.example.com", custom_domain = true }
 ]
+
+[env.production.observability]
+enabled = true
+head_sampling_rate = 1
+
 [env.production.vars]
 ENVIRONMENT = "production"
 LOG_LEVEL = "warn"
 APP_VERSION = "0.0.1"
+COMMIT_SHA = "UNSET"
 HEALTH_DB_TIMEOUT_MS = "2000"
 
 [[env.production.d1_databases]]
