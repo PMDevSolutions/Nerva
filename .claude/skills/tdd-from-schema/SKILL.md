@@ -144,7 +144,9 @@ import { SignJWT } from 'jose';
 
 const JWT_SECRET = new TextEncoder().encode('test-secret-key-at-least-32-chars!!');
 
-// Factory functions
+// Factory functions. Build the insert values with the faker-backed factories
+// every generated project ships in tests/fixtures/ (userFactory, createFactory)
+// so helpers only add the database round-trip.
 export async function createTestUser(
   overrides: Partial<typeof users.$inferInsert> = {},
 ) {

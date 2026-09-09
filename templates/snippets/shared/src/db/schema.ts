@@ -10,3 +10,6 @@ export const users = pgTable('users', {
   // Read queries must filter `WHERE deleted_at IS NULL` (see ./soft-delete.ts).
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
 });
+
+export type User = typeof users.$inferSelect;
+export type NewUser = typeof users.$inferInsert;

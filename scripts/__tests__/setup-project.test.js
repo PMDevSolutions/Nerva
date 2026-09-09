@@ -70,6 +70,7 @@ const SHARED_FILES = [
   "api/tsconfig.base.json", "api/tsconfig.json", "api/eslint.config.js", "api/prettier.config.js",
   "api/vitest.config.ts", "api/package.json", "api/pnpm-workspace.yaml", "api/drizzle.config.ts",
   "api/src/db/schema.ts", "api/src/db/client.ts", "api/src/db/schema-drift.ts", "api/tests/setup.ts",
+  "api/tests/fixtures", "api/tests/fixtures/factory.ts", "api/tests/fixtures/index.ts", "api/tests/fixtures.test.ts",
   "api/scripts/check-destructive-migrations.mjs", ".github/workflows/schema-drift.yml",
   ".github/workflows/schema-applied.yml", "postman/collection.json", "postman/environment.json",
   "README.md", "api/.gitignore",
@@ -152,11 +153,14 @@ describe("setup-project.sh", () => {
     }
     r.listed("api/src/db/rls-policies.sql");
     r.listed("api/tests/tenancy.test.ts");
+    r.listed("api/tests/fixtures/tenancy.ts");
+    expect(r.stdout).toContain(`Would append to: ${join(r.target, "api/tests/fixtures/index.ts")}`);
     expect(r.stdout).toContain(`Would append to: ${join(r.target, "api/.env.example")}`);
     expect(r.stdout).toMatch(/Tenancy:\s+multi-tenant/);
     const plain = dryRun("plain-proj", ["--node"]);
     plain.notListed("api/src/tenancy");
     plain.notListed("api/tests/tenancy.test.ts");
+    plain.notListed("api/tests/fixtures/tenancy.ts");
     // cloudflare keeps its env in .dev.vars.example
     const cf = dryRun("mt-cf", ["--cloudflare", "--multi-tenant"]);
     expect(cf.stdout).toContain(`Would append to: ${join(cf.target, "api/.dev.vars.example")}`);

@@ -1,0 +1,17 @@
+{
+  "extends": "../shared/tsconfig.node.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "moduleResolution": "bundler",
+    "rootDir": ".",
+    "paths": {}
+  },
+  "include": [
+    "shared/tests/fixtures/**/*.ts",
+    "shared/src/db/schema.ts",
+    "shared/src/tenancy/schema.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
+}

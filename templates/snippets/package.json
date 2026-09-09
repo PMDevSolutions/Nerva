@@ -7,10 +7,12 @@
     "typecheck:cf": "tsc --noEmit -p tsconfig.cloudflare.json",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json",
     "typecheck:lambda": "tsc --noEmit -p tsconfig.lambda.json",
-    "typecheck": "pnpm run typecheck:cf && pnpm run typecheck:node && pnpm run typecheck:lambda"
+    "typecheck": "pnpm run typecheck:cf && pnpm run typecheck:node && pnpm run typecheck:lambda && pnpm run typecheck:fixtures",
+    "typecheck:fixtures": "tsc --noEmit -p tsconfig.fixtures.json"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260415.1",
+    "@faker-js/faker": "^10.6.0",
     "@hono/node-server": "^1.16.0",
     "@types/node": "^25.6.0",
     "drizzle-orm": "^0.45.2",
