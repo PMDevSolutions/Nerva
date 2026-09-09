@@ -33,7 +33,9 @@ project-root/
 │   │   ├── unit/           # Service unit tests
 │   │   └── fixtures/       # Test data factories
 │   └── package.json
-├── scripts/                # Automation scripts
+├── scripts/                # Automation scripts (see scripts/README.md)
+│   ├── lib/                # Shared bash/JS helpers, pipeline.config.json reader
+│   └── __tests__/          # Vitest tests for scripts and hooks (pnpm test)
 ├── templates/              # Starter configs
 │   ├── shared/             # ESLint, Prettier, TypeScript configs
 │   ├── cloudflare-workers/ # Wrangler config
@@ -50,7 +52,10 @@ project-root/
 │   ├── agents/             # 24 specialized agents
 │   ├── skills/             # 12 API development skills
 │   ├── commands/           # Slash commands
+│   ├── hooks/              # Claude Code hooks (secret guard, prod-DB guard, reminders)
+│   ├── settings.json       # Hook wiring
 │   ├── pipeline.config.json
+│   ├── pipeline.config.schema.json
 │   ├── CUSTOM-AGENTS-GUIDE.md
 │   └── PLUGINS-REFERENCE.md
 ├── CLAUDE.md               # This file
@@ -87,7 +92,20 @@ project-root/
 
 # Generate typed API client (for Aurelius frontends)
 ./scripts/generate-client.sh
+
+# Run every local quality check (also: /verify-all, /ci)
+./scripts/verify-all.sh
+
+# Framework integrity: config schema, doc-count drift, prerequisites, migration guard
+node scripts/validate-pipeline-config.js
+./scripts/check-doc-counts.sh
+./scripts/check-prerequisites.sh
+node scripts/check-destructive-migrations.js
 ```
+
+Scripts read thresholds and policies from `.claude/pipeline.config.json`
+(coverage threshold, audit level, load-test VUs, destructive-migration
+blocking). Full reference: `scripts/README.md`.
 
 ## Development Commands
 
@@ -139,7 +157,7 @@ pnpm drizzle-kit studio    # Open Drizzle Studio (database GUI)
 
 ## Claude Code Architecture & Configuration
 
-### Installed Plugins (5 Total)
+### Installed Plugins (4 Total)
 
 - **episodic-memory** - Conversation search and memory
 - **commit-commands** - Git workflow automation
@@ -199,6 +217,24 @@ Agents are invoked automatically based on task context.
 | api-security | Input sanitization, SQL injection prevention, rate limiting | "security", "rate limit" |
 
 **Full catalog:** `.claude/skills/README.md`
+
+### Claude Code Hooks
+
+`.claude/settings.json` wires five hooks from `.claude/hooks/` (stdin JSON contract):
+
+| Event | Hook | Effect |
+|-------|------|--------|
+| PreToolUse (Bash) | secret-guard | Blocks `git add` of `.env`, `.dev.vars`, keys, forced adds, and `commit -a` with a tracked secret |
+| PreToolUse (Bash) | prod-db-guard | Blocks `drizzle-kit push` and DROP/TRUNCATE against production databases |
+| PostToolUse (Bash) | coverage-check | Compares vitest coverage with `tdd.coverageThreshold` |
+| PostToolUse (Bash) | migration-safety-reminder | After `drizzle-kit generate`, reminds to run the destructive-DDL check |
+| PostToolUse (Bash) | quality-gate-reminder | After a green test run, reminds to run types, security, coverage |
+
+Bypass for a legitimate case with `NERVA_SKIP_HOOKS=1`. Docs: `docs/onboarding/hooks.md`.
+
+### Slash Commands
+
+`/build-from-schema`, `/build-from-conversation`, `/build-from-aurelius`, `/test`, `/lint`, `/verify-all` (all local checks), `/ci` (same, machine-readable, non-interactive).
 
 ---
 ### Schema-to-API Pipeline
@@ -479,14 +515,28 @@ gh issue create               # Create issue
 ./scripts/load-test.sh              # k6 load tests
 ./scripts/generate-openapi-docs.sh  # OpenAPI documentation
 ./scripts/generate-client.sh        # Typed API client for Aurelius
+./scripts/verify-all.sh             # All checks in one run (/verify-all, /ci)
+pnpm test                           # Script + hook tests (scripts/__tests__)
+```
+
+**Framework Integrity:**
+```bash
+node scripts/validate-pipeline-config.js   # pipeline.config.json vs schema + phase graph
+./scripts/check-doc-counts.sh              # Doc count claims vs agents/skills/scripts on disk
+./scripts/check-prerequisites.sh           # Required/optional tooling report
 ```
 
 **Database:**
 ```bash
-./scripts/generate-migration.sh     # Generate Drizzle migration
+./scripts/generate-migration.sh     # Generate Drizzle migration (runs destructive-DDL guard)
+node scripts/check-destructive-migrations.js  # Scan migrations for DROP/TRUNCATE
 ./scripts/seed-database.sh          # Seed database with test data
 pnpm drizzle-kit studio             # Open database GUI
 ```
+Generated projects also get `pnpm db:check-destructive`, `pnpm db:check-drift`
+(prod schema vs Drizzle schema, lenient) and `pnpm db:check-drift:strict`, plus
+`schema-drift.yml` / `schema-applied.yml` workflows. See
+`docs/api-development/migration-safety.md`.
 
 **Project Setup:**
 ```bash
@@ -500,5 +550,5 @@ pnpm drizzle-kit studio             # Open database GUI
 
 ---
 
-**Last Updated:** 2026-07-07
-**Architecture:** 24 agents, 12 skills, 4 plugins + gh CLI, 9 scripts
+**Last Updated:** 2026-09-09
+**Architecture:** 24 agents, 12 skills, 4 plugins + gh CLI, 14 scripts, 7 commands, 5 hooks
