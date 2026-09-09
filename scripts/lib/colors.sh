@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # colors.sh — ANSI terminal color constants
 #
 # Source this file to get color variables. Colors are disabled when stdout is

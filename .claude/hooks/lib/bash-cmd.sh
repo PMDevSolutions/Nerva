@@ -252,6 +252,7 @@ hook_strip_wrappers() {
     esac
     rest=(${rest[@]+"${rest[@]:1}"})
   done
+  # shellcheck disable=SC2034  # consumed by the hook that sources this lib
   HOOK_ARGV=(${rest[@]+"${rest[@]}"})
   return 0
 }

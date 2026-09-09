@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # common.sh — Shared bash helpers for scripts/*.sh and .claude/hooks/*.sh
 #
 # Source this from any script:

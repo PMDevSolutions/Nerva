@@ -136,7 +136,7 @@ if [[ ! -d "$ROOT" ]]; then
   exit 2
 fi
 ROOT="$(cd "$ROOT" && pwd)"
-cd "$ROOT"
+cd "$ROOT" || exit 2
 API_DIR="${NERVA_API_DIR:-$ROOT/api}"
 MIGRATIONS_DIR="$API_DIR/src/db/migrations"
 

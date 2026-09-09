@@ -9,7 +9,6 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/common.sh
 source "$SCRIPT_DIR/lib/common.sh"
-PROJECT_ROOT="$(common_project_root)"
 API_DIR="$(common_api_dir)"
 
 VERBOSE=false
