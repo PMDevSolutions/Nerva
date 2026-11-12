@@ -258,6 +258,10 @@ See the [Patreon voting process](docs/community/patreon-voting.md) for details.
 
 To report a vulnerability, please see our [Security Policy](SECURITY.md).
 
+## Credits
+
+These agents in `.claude/agents/` are based on the agent definitions in [contains-studio/agents](https://github.com/contains-studio/agents) by Contains Studio, adapted for this project: `analytics-reporter`, `api-tester`, `backend-architect`, `brand-guardian`, `content-creator`, `devops-automator`, `feedback-synthesizer`, `infrastructure-maintainer`, `joker`, `legal-compliance-checker`, `performance-benchmarker`, `project-shipper`, `rapid-prototyper`, `sprint-prioritizer`, `studio-coach`, `studio-producer`, `test-writer-fixer`. Thanks to Contains Studio for sharing them.
+
 ## License
 
 MIT — see [LICENSE](LICENSE) for details.
